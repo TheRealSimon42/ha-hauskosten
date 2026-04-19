@@ -9,10 +9,18 @@ on:
     - cron: "0 0 * * *"
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   hassfest:
     name: Hassfest
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,6 +31,7 @@ jobs:
   hacs:
     name: HACS
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,3 +40,6 @@ jobs:
         uses: hacs/action@main
         with:
           category: integration
+          # Brands-Asset erfordert Eintrag im offiziellen home-assistant/brands
+          # Repo. Wird erst bei HACS-Default-Submission zum Release 1.0 relevant.
+          ignore: brands

@@ -23,6 +23,7 @@
   },
   "config_subentries": {
     "partei": {
+      "entry_type": "Party",
       "initiate_flow": {
         "user": "Add Party",
         "reconfigure": "Edit Party"
@@ -52,6 +53,7 @@
       }
     },
     "kostenposition": {
+      "entry_type": "Cost item",
       "initiate_flow": {
         "user": "Add Cost Item",
         "reconfigure": "Edit Cost Item"

@@ -5,12 +5,18 @@ on:
     tags:
       - "v*.*.*"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
 jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,10 +35,17 @@ jobs:
             exit 1
           fi
 
-      - name: Extract changelog section
-        id: changelog
+      - name: Install git-chglog
         run: |
-          sed -n "/## \[${{ steps.version.outputs.VERSION }}\]/,/## \[/p" CHANGELOG.md | sed '$d' > release_notes.md
+          CHGLOG_VERSION=0.15.4
+          wget -q "https://github.com/git-chglog/git-chglog/releases/download/v${CHGLOG_VERSION}/git-chglog_${CHGLOG_VERSION}_linux_amd64.tar.gz"
+          tar -xzf "git-chglog_${CHGLOG_VERSION}_linux_amd64.tar.gz"
+          sudo mv git-chglog /usr/local/bin/
+          git-chglog --version
+
+      - name: Generate release notes
+        run: |
+          git-chglog --config .chglog/release-config.yml --output release_notes.md "${GITHUB_REF_NAME}"
           cat release_notes.md
 
       - name: Create GitHub Release

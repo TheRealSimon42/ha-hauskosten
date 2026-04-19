@@ -1,0 +1,37 @@
+style: github
+template: RELEASE.tpl.md
+info:
+  repository_url: https://github.com/TheRealSimon42/ha-hauskosten
+options:
+  commits:
+    sort_by: Author.date
+    filters:
+      Type:
+        - feat
+        - fix
+        - perf
+        - refactor
+        - docs
+        - chore
+  commit_groups:
+    sort_by: Custom
+    title_order:
+      - feat
+      - fix
+      - perf
+      - refactor
+      - chore
+      - docs
+    title_maps:
+      feat: Features
+      fix: Bugfixes
+      perf: Performance
+      refactor: Refactoring
+      chore: Chores
+      docs: Documentation
+  header:
+    pattern: "^(\\w+)(?:\\(([^)]+)\\))?:\\s(.*)$"
+    pattern_maps:
+      - Type
+      - Scope
+      - Subject

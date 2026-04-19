@@ -6,10 +6,18 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Ruff + Mypy
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,11 +27,12 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
+          cache-dependency-path: pyproject.toml
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ruff mypy homeassistant voluptuous-stubs
+          pip install -e ".[dev]"
 
       - name: Ruff check
         run: ruff check --output-format=github custom_components/hauskosten tests

@@ -9,7 +9,7 @@ Dieser Stub wird vom integration-architect Sub-Agent ausgefuellt.
 
 from __future__ import annotations
 
-from datetime import date, datetime  # noqa: TC003
+from datetime import date, datetime
 from enum import StrEnum
 from typing import TypedDict
 
