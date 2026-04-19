@@ -23,6 +23,7 @@
   },
   "config_subentries": {
     "partei": {
+      "entry_type": "Partei",
       "initiate_flow": {
         "user": "Partei hinzufügen",
         "reconfigure": "Partei bearbeiten"
@@ -52,6 +53,7 @@
       }
     },
     "kostenposition": {
+      "entry_type": "Kostenposition",
       "initiate_flow": {
         "user": "Kostenposition hinzufügen",
         "reconfigure": "Kostenposition bearbeiten"
