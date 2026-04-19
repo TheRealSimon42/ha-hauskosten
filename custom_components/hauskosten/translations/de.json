@@ -230,12 +230,62 @@
     "add_einmalig": {
       "name": "Einmalige Kostenposition hinzufügen",
       "description": "Fügt eine einmalige Kostenposition hinzu (z. B. Reparatur, Handwerkerrechnung).",
-      "fields": {}
+      "fields": {
+        "entry_id": {
+          "name": "Haus",
+          "description": "Die Hauskosten-Instanz. Nicht nötig, wenn nur ein Haus konfiguriert ist."
+        },
+        "bezeichnung": {
+          "name": "Bezeichnung",
+          "description": "Kurzer Titel für die Kostenposition."
+        },
+        "kategorie": {
+          "name": "Kategorie",
+          "description": "Kategorie der Kosten (z. B. Wartung, Versicherung)."
+        },
+        "betrag_eur": {
+          "name": "Betrag (€)",
+          "description": "Gesamter Brutto-Betrag in Euro."
+        },
+        "datum": {
+          "name": "Datum",
+          "description": "Datum, an dem die Kosten angefallen sind."
+        },
+        "zuordnung": {
+          "name": "Zuordnung",
+          "description": "Haus = auf Parteien verteilen. Partei = gehört einer Partei direkt."
+        },
+        "zuordnung_partei_id": {
+          "name": "Zielpartei",
+          "description": "Nur bei Zuordnung „Partei“: ID der Zielpartei."
+        },
+        "verteilung": {
+          "name": "Verteilschlüssel",
+          "description": "Wie die Kosten auf die Parteien verteilt werden."
+        },
+        "notiz": {
+          "name": "Notiz",
+          "description": "Optionale Notiz zur Position."
+        }
+      }
     },
     "mark_paid": {
       "name": "Als bezahlt markieren",
       "description": "Markiert eine Kostenposition als bezahlt.",
-      "fields": {}
+      "fields": {
+        "entry_id": {
+          "name": "Haus",
+          "description": "Die Hauskosten-Instanz. Nicht nötig, wenn nur ein Haus konfiguriert ist."
+        },
+        "kostenposition_id": {
+          "name": "Kostenposition-ID",
+          "description": "Die ID der Kostenposition oder ad-hoc-Kostenposition."
+        },
+        "bezahlt_am": {
+          "name": "Bezahlt am",
+          "description": "Datum, an dem die Zahlung erfolgt ist."
+        }
+      }
     }
   },
   "entity": {

@@ -4,6 +4,7 @@
   "codeowners": ["@TheRealSimon42"],
   "config_flow": true,
   "documentation": "https://github.com/TheRealSimon42/ha-hauskosten",
+  "integration_type": "hub",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/TheRealSimon42/ha-hauskosten/issues",
   "requirements": [],
