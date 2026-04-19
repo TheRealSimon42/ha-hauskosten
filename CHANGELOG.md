@@ -36,6 +36,20 @@ Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Feldern, Migrations-Hook (`_async_migrate_func`) für künftige
   Schema-Versionen. 100 % Line + Branch Coverage via
   `tests/test_storage.py`.
+- Coordinator `coordinator.py` (`HauskostenCoordinator`) als
+  `DataUpdateCoordinator[CoordinatorData]` mit 30-Minuten-Polling
+  und State-Change-Listener auf allen referenzierten Verbrauchs-
+  Entities. Pipeline: Parteien/Kostenpositionen aus ConfigEntry-
+  Subentries normalisieren, Ad-hoc-Kosten aus Store lesen,
+  Verbrauchs-Entities lesen (fehlende / unavailable / nicht
+  numerisch → `PositionAttribution.error`), `annualize` /
+  `resolve_verbrauchs_betrag` auf Betrags-Ebene, `effektive_tage`
+  für Zeitgewichtung, `distribution.allocate` pro Position,
+  Aggregation in `CoordinatorData` mit Haus-Totals und
+  nächstem Fälligkeitsdatum. Distribution-Fehler werden
+  positionsweise markiert (Coordinator lebt weiter);
+  unerwartete Exceptions werden zu `UpdateFailed`. 100 % Line +
+  Branch Coverage auf coordinator.py via `tests/test_coordinator.py`.
 
 ### Changed
 
