@@ -156,12 +156,12 @@ def _build_sensors(
 
     # Per-party sensors.
     for partei_id, partei_result in data["parteien"].items():
-        for cls in _PARTEI_SENSOR_CLASSES:
-            uid = cls.make_unique_id(entry_id, partei_id)
+        for partei_cls in _PARTEI_SENSOR_CLASSES:
+            uid = partei_cls.make_unique_id(entry_id, partei_id)
             if uid in known_ids:
                 continue
             known_ids.add(uid)
-            new.append(cls(coordinator, entry_id, partei_id))
+            new.append(partei_cls(coordinator, entry_id, partei_id))
         # Per-category sensors for this party.
         for kategorie in partei_result["pro_kategorie_jahr_eur"]:
             uid = ParteiKategorieSensor.make_unique_id(entry_id, partei_id, kategorie)
@@ -173,12 +173,12 @@ def _build_sensors(
             )
 
     # House-wide sensors.
-    for cls in _HAUS_SENSOR_CLASSES:
-        uid = cls.make_haus_unique_id(entry_id)
+    for haus_cls in _HAUS_SENSOR_CLASSES:
+        uid = haus_cls.make_haus_unique_id(entry_id)
         if uid in known_ids:
             continue
         known_ids.add(uid)
-        new.append(cls(coordinator, entry_id))
+        new.append(haus_cls(coordinator, entry_id))
 
     for kategorie in data["haus"]["pro_kategorie_jahr_eur"]:
         uid = HausKategorieSensor.make_unique_id(entry_id, kategorie)
@@ -284,11 +284,14 @@ class ParteiSensorBase(HauskostenSensorBase):
         return f"{entry_id}_{cls._scope}_{partei_id}_{cls._zweck}"
 
     def _partei_result(self) -> ParteiResult | None:
-        """Return the ParteiResult for this party, or ``None`` if it vanished."""
-        data = self.coordinator.data
-        if data is None:  # pragma: no cover - first refresh populates data
-            return None
-        return data["parteien"].get(self._partei_id)
+        """Return the ParteiResult for this party, or ``None`` if it vanished.
+
+        ``CoordinatorEntity`` types ``coordinator.data`` as the coordinator's
+        data generic (non-optional) once HA has populated it; before the first
+        refresh HA never dispatches to entities, so we can rely on the data
+        being present here.
+        """
+        return self.coordinator.data["parteien"].get(self._partei_id)
 
     @property
     def available(self) -> bool:
@@ -324,8 +327,12 @@ class HausSensorBase(HauskostenSensorBase):
 # ---------------------------------------------------------------------------
 
 
-class _EuroPartyMixin:
-    """Shared attributes for EUR-valued party sensors."""
+class _EuroPartyMixin(SensorEntity):
+    """Shared attributes for EUR-valued party sensors.
+
+    Inherits from :class:`SensorEntity` so mypy sees the attribute overrides
+    as narrowings of the base's annotations rather than conflicts.
+    """
 
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
@@ -444,7 +451,7 @@ class ParteiKategorieSensor(_EuroPartyMixin, ParteiSensorBase):
         return placeholders
 
     @classmethod
-    def make_unique_id(  # type: ignore[override]
+    def make_unique_id(
         cls,
         entry_id: str,
         partei_id: str,
@@ -484,8 +491,12 @@ class ParteiKategorieSensor(_EuroPartyMixin, ParteiSensorBase):
 # ---------------------------------------------------------------------------
 
 
-class _EuroHausMixin:
-    """Shared attributes for EUR-valued house-wide sensors."""
+class _EuroHausMixin(SensorEntity):
+    """Shared attributes for EUR-valued house-wide sensors.
+
+    Inherits from :class:`SensorEntity` so mypy sees the attribute overrides
+    as narrowings of the base's annotations rather than conflicts.
+    """
 
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
@@ -503,10 +514,7 @@ class HausJahrGesamtSensor(_EuroHausMixin, HausSensorBase):
     @property
     def native_value(self) -> float | None:
         """Return the house-wide year-to-date total (EUR)."""
-        data = self.coordinator.data
-        if data is None:  # pragma: no cover - first refresh populates data
-            return None
-        return data["haus"]["jahr_aktuell_eur"]
+        return self.coordinator.data["haus"]["jahr_aktuell_eur"]
 
 
 class HausJahrBudgetSensor(_EuroHausMixin, HausSensorBase):
@@ -519,10 +527,7 @@ class HausJahrBudgetSensor(_EuroHausMixin, HausSensorBase):
     @property
     def native_value(self) -> float | None:
         """Return the house-wide yearly budget (EUR)."""
-        data = self.coordinator.data
-        if data is None:  # pragma: no cover - first refresh populates data
-            return None
-        return data["haus"]["jahr_budget_eur"]
+        return self.coordinator.data["haus"]["jahr_budget_eur"]
 
 
 class HausNaechsteFaelligkeitSensor(HausSensorBase):
@@ -536,12 +541,9 @@ class HausNaechsteFaelligkeitSensor(HausSensorBase):
     @property
     def native_value(self) -> date | None:
         """Return the earliest due date across all parties, or ``None``."""
-        data = self.coordinator.data
-        if data is None:  # pragma: no cover - first refresh populates data
-            return None
         dates = [
             p["naechste_faelligkeit"]
-            for p in data["parteien"].values()
+            for p in self.coordinator.data["parteien"].values()
             if p["naechste_faelligkeit"] is not None
         ]
         if not dates:
@@ -573,9 +575,7 @@ class HausKategorieSensor(_EuroHausMixin, HausSensorBase):
         return placeholders
 
     @classmethod
-    def make_unique_id(  # type: ignore[override]
-        cls, entry_id: str, kategorie: Kategorie | None = None
-    ) -> str:
+    def make_unique_id(cls, entry_id: str, kategorie: Kategorie | None = None) -> str:
         """Return the stable unique-id including the category segment."""
         if kategorie is None:
             return f"{entry_id}_haus_kategorie"
@@ -584,19 +584,15 @@ class HausKategorieSensor(_EuroHausMixin, HausSensorBase):
     @property
     def native_value(self) -> float | None:
         """Return the house-wide yearly total for the target category."""
-        data = self.coordinator.data
-        if data is None:  # pragma: no cover - first refresh populates data
-            return None
-        return data["haus"]["pro_kategorie_jahr_eur"].get(self._kategorie)
+        return self.coordinator.data["haus"]["pro_kategorie_jahr_eur"].get(
+            self._kategorie
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the category id alongside the positions across all parties."""
-        data = self.coordinator.data
-        if data is None:  # pragma: no cover - first refresh populates data
-            return {"kategorie": self._kategorie.value}
         positionen: list[dict[str, Any]] = []
-        for partei_result in data["parteien"].values():
+        for partei_result in self.coordinator.data["parteien"].values():
             positionen.extend(
                 _position_attrs(p)
                 for p in partei_result["positionen"]
