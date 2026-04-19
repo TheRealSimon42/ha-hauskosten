@@ -9,6 +9,43 @@ Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Added
 
+- Sensor-Platform `sensor.py` final: `async_setup_entry` baut aus
+  `coordinator.data` dynamisch alle Entities. Pro Partei: `monat_aktuell`,
+  `jahr_aktuell`, `jahr_budget`, `naechste_faelligkeit` (DATE) plus ein
+  `kategorie_<kategorie>_jahr`-Sensor pro Kategorie mit Beitrag > 0. Fürs
+  ganze Haus: `jahr_gesamt`, `jahr_budget`, `naechste_faelligkeit` (früheste
+  Fälligkeit aller Parteien) und ein `kategorie_<kategorie>_jahr`-Sensor
+  pro Haus-weiter Kategorie. Alle Entity-Klassen erben
+  `HauskostenSensorBase` (`CoordinatorEntity` + `SensorEntity`) mit
+  gemeinsamer `DeviceInfo` (ein Device pro ConfigEntry) und gesetztem
+  `_attr_has_entity_name = True`. Unique-IDs rein auf IDs:
+  `{entry_id}_partei_{subentry_id}_{zweck}` bzw.
+  `{entry_id}_haus_{zweck}` — keine Abhängigkeit vom Partei-Namen.
+  EUR-Sensoren mit `device_class=MONETARY`, `state_class=TOTAL`,
+  `native_unit_of_measurement="EUR"`, `suggested_display_precision=2`;
+  Fälligkeits-Sensoren mit `device_class=DATE`. Translation-Keys aus
+  `entity.sensor.*` in `strings.json` (`partei_monat_aktuell`,
+  `partei_jahr_aktuell`, `partei_jahr_budget`,
+  `partei_naechste_faelligkeit`, `partei_kategorie_jahr`, `haus_jahr_gesamt`,
+  `haus_jahr_budget`, `haus_kategorie_jahr`, `naechste_faelligkeit`) mit
+  `_attr_translation_placeholders` für `partei` / `jahr` / `kategorie`.
+  Dynamisches Entity-Management via `coordinator.async_add_listener` —
+  neue Parteien / Kategorien erzeugen neue Sensoren ohne Reload; ein
+  `known_ids`-Set verhindert Doppelregistrierung. Properties lesen
+  ausschließlich aus `coordinator.data`, `available` wird gated auf
+  Parteianwesenheit, sodass gelöschte Parteien `unavailable` werden.
+- `tests/test_sensor.py` (22 Tests): Empty-Setup (nur Haus-Sensoren),
+  Ein-Partei-Ein-Position-Szenario (alle Sensoren + korrekte native_values),
+  Zwei Parteien × zwei Kategorien (Kategorie-Sensoren je Partei und Haus),
+  Coordinator-Refresh propagiert Werte an Sensoren, dynamische
+  Subentry-Ergänzung (neue Partei → neue Sensoren ohne Reload),
+  Device-Grouping unter `(DOMAIN, entry_id)`, `has_entity_name=True` +
+  `translation_key`, unique_id-Stabilität gegen Partei-Namen,
+  Verschwinden der Partei → `unavailable`, Fälligkeits-Sensoren liefern
+  ISO-Daten / `unknown`, keine Kategorie-Sensoren für Null-Werte,
+  Attribute listen `positionen` / `kategorie`. Coverage `sensor.py`
+  99.07 %, Gesamt 97.85 % (310 Tests insgesamt).
+
 - Integration-Lifecycle in `__init__.py` final: `async_setup_entry`
   orchestriert Store-Load (Fehler -> `ConfigEntryNotReady`), Coordinator-
   Konstruktion + `async_config_entry_first_refresh`, State-Listener,
