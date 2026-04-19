@@ -230,12 +230,62 @@
     "add_einmalig": {
       "name": "Add One-Time Cost",
       "description": "Adds a one-time cost item (e.g. repair, contractor invoice).",
-      "fields": {}
+      "fields": {
+        "entry_id": {
+          "name": "House",
+          "description": "The hauskosten instance. Not required when only one house is configured."
+        },
+        "bezeichnung": {
+          "name": "Label",
+          "description": "Short title for the cost item."
+        },
+        "kategorie": {
+          "name": "Category",
+          "description": "Cost category (e.g. maintenance, insurance)."
+        },
+        "betrag_eur": {
+          "name": "Amount (EUR)",
+          "description": "Total gross amount in Euro."
+        },
+        "datum": {
+          "name": "Date",
+          "description": "Date on which the cost was incurred."
+        },
+        "zuordnung": {
+          "name": "Assignment",
+          "description": "House = distribute across parties. Party = belongs to one party."
+        },
+        "zuordnung_partei_id": {
+          "name": "Target party",
+          "description": "Only with assignment 'Party': ID of the target party."
+        },
+        "verteilung": {
+          "name": "Distribution key",
+          "description": "How the cost is split across parties."
+        },
+        "notiz": {
+          "name": "Note",
+          "description": "Optional note attached to the item."
+        }
+      }
     },
     "mark_paid": {
       "name": "Mark As Paid",
       "description": "Marks a cost item as paid.",
-      "fields": {}
+      "fields": {
+        "entry_id": {
+          "name": "House",
+          "description": "The hauskosten instance. Not required when only one house is configured."
+        },
+        "kostenposition_id": {
+          "name": "Cost item ID",
+          "description": "The ID of the cost item or ad-hoc cost record."
+        },
+        "bezahlt_am": {
+          "name": "Paid on",
+          "description": "Date on which the payment was made."
+        }
+      }
     }
   },
   "entity": {

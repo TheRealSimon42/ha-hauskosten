@@ -9,6 +9,38 @@ Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Added
 
+- Integration-Lifecycle in `__init__.py` final: `async_setup_entry`
+  orchestriert Store-Load (Fehler -> `ConfigEntryNotReady`), Coordinator-
+  Konstruktion + `async_config_entry_first_refresh`, State-Listener,
+  `hass.data[DOMAIN][entry_id]` mit `store` + `coordinator`,
+  `add_update_listener` (via `async_on_unload`) fuer Subentry-Refresh
+  und Platform-Forward an `sensor`. `async_unload_entry` demontiert
+  Listener, unloadet Platforms, raeumt `hass.data` auf und entfernt
+  Services beim letzten Entry. `async_entry_update_listener` rewiredet
+  State-Listener und ruft `async_request_refresh`. `async_migrate_entry`
+  akzeptiert die aktuelle Schema-Version v1 und weist hoehere Versionen
+  (Downgrade) ab.
+- Service-Actions `hauskosten.add_einmalig` und `hauskosten.mark_paid`
+  in `services.py` + `services.yaml`; optional `entry_id` (Auto-Pick
+  bei genau einem Entry, sonst Pflicht). `add_einmalig` generiert
+  UUIDs, schreibt via `HauskostenStore.async_add_adhoc` und loest
+  `coordinator.async_request_refresh` aus; `mark_paid` schreibt via
+  `async_mark_paid`. `ServiceValidationError` bei unbekanntem
+  `entry_id`, fehlender Disambiguierung oder Duplikat-IDs.
+- Sensor-Platform-Stub (`sensor.py`) ohne Entities; Phase 1.8 ersetzt
+  ihn, erlaubt Phase 1.7 aber bereits Platform-Forward und End-to-End-
+  Setup.
+- Service-Felder in `strings.json` + `translations/de.json` +
+  `translations/en.json` (Name + Description pro Feld fuer
+  `add_einmalig` und `mark_paid`).
+- `tests/test_init.py` (20 Tests): Setup-Happy-Path inkl. Store- und
+  Coordinator-Wiring, State-Listener-Refresh bei Verbrauchs-Entity-
+  Aenderung, Store-Load-Failure -> `ConfigEntryNotReady`, Unload mit
+  Listener- und hass.data-Cleanup, Update-Listener triggert
+  Coordinator-Refresh, Migration-Contract (aktuelle Version / Downgrade),
+  Services-Registrierung + Ausloesung + Entry-Resolution inkl.
+  Multi-Entry-Disambiguierung. Coverage auf `__init__.py` 96.88 %,
+  `services.py` 92.00 %, Gesamt 97.60 %.
 - Projekt-Setup: `AGENTS.md`, Architektur-Dokumente, Sub-Agent-Definitionen
 - Coding-Standards und Pre-Commit-Hooks
 - Manifest-, HACS- und EditorConfig-Grundgerüst
@@ -81,6 +113,9 @@ Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Changed
 
+- `manifest.json`: `integration_type` auf `"hub"` gesetzt, da wir
+  Subentries fuer Parteien und Kostenpositionen verwenden -- entspricht
+  dem Hassfest-Standard fuer Multi-Device-/Multi-Record-Integrationen.
 - `tests/conftest.py`: Plugin `pytest_homeassistant_custom_component` wird
   nur geladen wenn installiert, damit Pure-Logik-Tests auch in schlanken
   Umgebungen laufen.

@@ -1,0 +1,97 @@
+# Service action definitions for the hauskosten integration.
+# User-facing texts live in strings.json / translations/*.json
+# (keys services.<name>.name / description and fields.<field>.name /
+# description).
+
+add_einmalig:
+  fields:
+    entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: hauskosten
+    bezeichnung:
+      required: true
+      example: "Handwerker Rohrbruch"
+      selector:
+        text:
+    kategorie:
+      required: true
+      selector:
+        select:
+          translation_key: kategorie
+          options:
+            - versicherung
+            - muell
+            - wasser
+            - abwasser
+            - strom
+            - heizung
+            - wartung
+            - grund
+            - hausgeld
+            - kommunikation
+            - reinigung
+            - sonstiges
+    betrag_eur:
+      required: true
+      example: 150.00
+      selector:
+        number:
+          min: 0
+          step: 0.01
+          unit_of_measurement: "€"
+          mode: box
+    datum:
+      required: true
+      example: "2026-04-19"
+      selector:
+        date:
+    zuordnung:
+      required: true
+      default: haus
+      selector:
+        select:
+          translation_key: zuordnung
+          options:
+            - haus
+            - partei
+    zuordnung_partei_id:
+      required: false
+      selector:
+        text:
+    verteilung:
+      required: true
+      default: gleich
+      selector:
+        select:
+          translation_key: verteilung
+          options:
+            - direkt
+            - gleich
+            - flaeche
+            - personen
+            - verbrauch
+    notiz:
+      required: false
+      selector:
+        text:
+          multiline: true
+
+mark_paid:
+  fields:
+    entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: hauskosten
+    kostenposition_id:
+      required: true
+      example: "kp-versicherung"
+      selector:
+        text:
+    bezahlt_am:
+      required: true
+      example: "2026-04-19"
+      selector:
+        date:
