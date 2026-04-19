@@ -12,10 +12,18 @@ Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Projekt-Setup: `AGENTS.md`, Architektur-Dokumente, Sub-Agent-Definitionen
 - Coding-Standards und Pre-Commit-Hooks
 - Manifest-, HACS- und EditorConfig-Grundgerüst
+- Pure-Logik-Modul `distribution.py` mit allen Verteilungsalgorithmen
+  (`direkt`, `gleich`, `flaeche`, `personen`, `verbrauch` Subzähler) inkl.
+  Zeitgewichtung bei Mieterwechsel und Rundungskorrektur. Vollständige
+  Testabdeckung (100 % Line + Branch) via `tests/test_distribution.py`.
 
 ### Changed
 
-- —
+- `tests/conftest.py`: Plugin `pytest_homeassistant_custom_component` wird
+  nur geladen wenn installiert, damit Pure-Logik-Tests auch in schlanken
+  Umgebungen laufen.
+- `pyproject.toml`: Ruff-Regel `TRY003` ignoriert (lange Fehlermeldungen
+  inline sind bewusst erlaubt für bessere Diagnose).
 
 ### Fixed
 
