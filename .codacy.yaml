@@ -1,0 +1,23 @@
+# Codacy configuration
+# https://docs.codacy.com/repositories-configure/codacy-configuration-file/
+
+engines:
+  ruff:
+    enabled: true
+  mypy:
+    enabled: true
+  radon:
+    enabled: true
+    complexity_threshold: 10
+  pylint:
+    enabled: false  # wir nutzen ruff
+  bandit:
+    enabled: true
+
+exclude_paths:
+  - tests/**
+  - docs/**
+  - .github/**
+  - .claude/**
+  - "**/__pycache__/**"
+  - "**/*.pyc"

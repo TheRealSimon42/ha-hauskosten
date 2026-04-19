@@ -1,0 +1,113 @@
+{
+  "title": "Hauskosten (House Costs)",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add House",
+        "description": "Create a new house. Afterwards, you can add parties and cost items as subentries.",
+        "data": {
+          "haus_name": "House name"
+        },
+        "data_description": {
+          "haus_name": "e.g. \"Main Street 1\""
+        }
+      }
+    },
+    "error": {
+      "name_required": "Name must not be empty.",
+      "name_too_long": "Name must be 50 characters or less."
+    },
+    "abort": {
+      "already_configured": "This house is already configured."
+    }
+  },
+  "config_subentries": {
+    "partei": {
+      "initiate_flow": {
+        "user": "Add Party",
+        "reconfigure": "Edit Party"
+      },
+      "step": {
+        "user": {
+          "title": "Create Party",
+          "data": {
+            "name": "Party name",
+            "flaeche_qm": "Living area (m²)",
+            "personen": "Number of persons",
+            "bewohnt_ab": "Occupied from",
+            "bewohnt_bis": "Occupied until (optional)",
+            "hinweis": "Note (optional)"
+          },
+          "data_description": {
+            "name": "e.g. \"Upper floor\", \"Attic tenant\"",
+            "bewohnt_bis": "Leave empty for currently occupied"
+          }
+        }
+      },
+      "error": {
+        "name_not_unique": "A party with this name already exists.",
+        "invalid_flaeche": "Area must be between 0 and 1000 m².",
+        "invalid_personen": "Number of persons must be between 0 and 20.",
+        "invalid_date_range": "\"Occupied from\" must be before \"Occupied until\"."
+      }
+    },
+    "kostenposition": {
+      "initiate_flow": {
+        "user": "Add Cost Item",
+        "reconfigure": "Edit Cost Item"
+      },
+      "step": {
+        "user": {
+          "title": "Create Cost Item",
+          "description": "Select assignment and mode first. The remaining fields will adapt accordingly."
+        }
+      },
+      "error": {
+        "invalid_combination": "This combination of assignment, mode and distribution key is invalid. See docs."
+      }
+    }
+  },
+  "services": {
+    "add_einmalig": {
+      "name": "Add One-Time Cost",
+      "description": "Adds a one-time cost item (e.g. repair, contractor invoice).",
+      "fields": {}
+    },
+    "mark_paid": {
+      "name": "Mark As Paid",
+      "description": "Marks a cost item as paid.",
+      "fields": {}
+    }
+  },
+  "entity": {
+    "sensor": {
+      "partei_monat_aktuell": {
+        "name": "{partei} – Cost this month"
+      },
+      "partei_jahr_aktuell": {
+        "name": "{partei} – Cost {jahr}"
+      },
+      "partei_jahr_budget": {
+        "name": "{partei} – Budget {jahr}"
+      },
+      "partei_naechste_faelligkeit": {
+        "name": "{partei} – Next due date"
+      },
+      "partei_kategorie_jahr": {
+        "name": "{partei} – {kategorie} {jahr}"
+      },
+      "haus_jahr_gesamt": {
+        "name": "House – Total cost {jahr}"
+      },
+      "haus_jahr_budget": {
+        "name": "House – Budget {jahr}"
+      },
+      "haus_kategorie_jahr": {
+        "name": "House – {kategorie} {jahr}"
+      },
+      "naechste_faelligkeit": {
+        "name": "Next due date"
+      }
+    }
+  }
+}

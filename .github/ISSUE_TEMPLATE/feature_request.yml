@@ -1,0 +1,41 @@
+name: 💡 Feature Request
+description: Eine neue Funktion vorschlagen
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke für deinen Vorschlag!
+        Bitte beachte: Die Integration hat einen bewusst engen Scope (siehe `docs/ARCHITECTURE.md` → Abgrenzung).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Welches Problem löst dieses Feature?
+      description: Beschreibe den Use-Case — nicht die Lösung.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Wie könnte die Lösung aussehen?
+      description: Optional. Lass uns wissen, wenn du schon eine Vorstellung hast.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativen, die du erwogen hast
+      description: Gibt es Workarounds?
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope-Check
+      description: Bitte prüfe vor dem Einreichen
+      options:
+        - label: Ich habe `docs/ARCHITECTURE.md` → "Abgrenzung" gelesen und dieses Feature passt in den Scope
+          required: true
+        - label: Ich habe die Roadmap in der README gecheckt — das Feature ist noch nicht geplant
+          required: true

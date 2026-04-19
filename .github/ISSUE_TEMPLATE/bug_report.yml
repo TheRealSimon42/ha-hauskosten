@@ -1,0 +1,88 @@
+name: 🐛 Bug Report
+description: Ein Bug in der Integration melden
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke, dass du dir die Zeit nimmst, einen Bug zu melden!
+        Bitte fülle die Felder sorgfältig aus — das hilft uns, das Problem schnell zu lösen.
+
+  - type: input
+    id: ha-version
+    attributes:
+      label: Home Assistant Version
+      description: z. B. 2026.4.3
+      placeholder: 2026.x.y
+    validations:
+      required: true
+
+  - type: input
+    id: integration-version
+    attributes:
+      label: Hauskosten Version
+      description: z. B. 0.1.0 (siehe Settings → Devices & Services → Hauskosten)
+      placeholder: 0.x.y
+    validations:
+      required: true
+
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation via
+      options:
+        - HACS
+        - Manuell
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: Was ist passiert?
+      description: Beschreibe das Problem klar und präzise.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Was hättest du stattdessen erwartet?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Schritte zur Reproduktion
+      placeholder: |
+        1. Öffne Einstellungen → Geräte & Dienste
+        2. Klicke auf ...
+        3. Sieh den Fehler
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Integration-Konfiguration (anonymisiert)
+      description: Wenn sinnvoll, füge Parteien und Kostenpositionen in anonymisierter Form an.
+      render: yaml
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevante Log-Auszüge
+      description: Aus `Einstellungen → System → Logs`, nach `hauskosten` gefiltert.
+      render: text
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checks
+      options:
+        - label: Ich habe in den offenen und geschlossenen Issues nach einem ähnlichen Bug gesucht
+          required: true
+        - label: Ich verwende die neueste Version der Integration
+          required: true

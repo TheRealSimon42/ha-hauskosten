@@ -1,0 +1,141 @@
+[project]
+name = "ha-hauskosten"
+version = "0.0.1"
+description = "Home Assistant Custom Integration für faire Hauskosten-Verteilung in Mehrfamilienhäusern"
+readme = "README.md"
+license = { text = "CC-BY-NC-SA-4.0" }
+authors = [{ name = "Simon42", email = "noreply@simon42.com" }]
+requires-python = ">=3.13"
+classifiers = [
+    "License :: Other/Proprietary License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.urls]
+Homepage = "https://github.com/TheRealSimon42/ha-hauskosten"
+Issues = "https://github.com/TheRealSimon42/ha-hauskosten/issues"
+Documentation = "https://github.com/TheRealSimon42/ha-hauskosten#readme"
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+src = ["custom_components/hauskosten", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # bugbear
+    "UP",   # pyupgrade
+    "SIM",  # simplify
+    "RUF",  # ruff-specific
+    "C4",   # comprehensions
+    "N",    # naming
+    "D",    # pydocstyle
+    "ANN",  # type annotations
+    "S",    # bandit (security)
+    "TID",  # tidy imports
+    "ARG",  # unused arguments
+    "PTH",  # use pathlib
+    "PL",   # pylint subset
+    "PT",   # pytest style
+    "RET",  # return
+    "TRY",  # try/except antipatterns
+]
+ignore = [
+    "D203",   # conflict with D211
+    "D213",   # conflict with D212
+    "ANN401", # Any sometimes legit (HA config dicts)
+    "PLR0913", # too many arguments (HA callbacks need many)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "D",      # no docstrings required in tests
+    "ANN",    # no type annotations required in tests
+    "S101",   # assert is fine in tests
+    "PLR2004", # magic values are fine in tests
+]
+"custom_components/hauskosten/__init__.py" = ["D104"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+known-first-party = ["custom_components.hauskosten"]
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "homeassistant",
+    "first-party",
+    "local-folder",
+]
+
+[tool.ruff.lint.isort.sections]
+homeassistant = ["homeassistant"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+files = ["custom_components/hauskosten"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--strict-config",
+    "--cov=custom_components.hauskosten",
+    "--cov-report=term-missing",
+    "--cov-report=xml",
+    "--cov-branch",
+]
+markers = [
+    "slow: marks tests as slow",
+    "integration: marks integration tests",
+]
+
+[tool.coverage.run]
+source = ["custom_components/hauskosten"]
+branch = true
+omit = ["tests/*"]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+
+[tool.coverage.paths]
+source = ["custom_components/hauskosten"]

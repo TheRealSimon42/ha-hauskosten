@@ -1,0 +1,113 @@
+{
+  "title": "Hauskosten",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Haus anlegen",
+        "description": "Lege ein neues Haus an. Anschließend kannst du Parteien und Kostenpositionen als Subentries hinzufügen.",
+        "data": {
+          "haus_name": "Name des Hauses"
+        },
+        "data_description": {
+          "haus_name": "z. B. \"Musterstraße 1\""
+        }
+      }
+    },
+    "error": {
+      "name_required": "Der Name darf nicht leer sein.",
+      "name_too_long": "Der Name darf maximal 50 Zeichen haben."
+    },
+    "abort": {
+      "already_configured": "Dieses Haus ist bereits eingerichtet."
+    }
+  },
+  "config_subentries": {
+    "partei": {
+      "initiate_flow": {
+        "user": "Partei hinzufügen",
+        "reconfigure": "Partei bearbeiten"
+      },
+      "step": {
+        "user": {
+          "title": "Partei anlegen",
+          "data": {
+            "name": "Name der Partei",
+            "flaeche_qm": "Wohnfläche (m²)",
+            "personen": "Anzahl Personen",
+            "bewohnt_ab": "Bewohnt ab",
+            "bewohnt_bis": "Bewohnt bis (optional)",
+            "hinweis": "Hinweis (optional)"
+          },
+          "data_description": {
+            "name": "z. B. \"OG (Simon)\", \"DG (Mieter Müller)\"",
+            "bewohnt_bis": "Leer lassen für aktuell bewohnt"
+          }
+        }
+      },
+      "error": {
+        "name_not_unique": "Eine Partei mit diesem Namen existiert bereits.",
+        "invalid_flaeche": "Die Fläche muss zwischen 0 und 1000 m² liegen.",
+        "invalid_personen": "Die Personenzahl muss zwischen 0 und 20 liegen.",
+        "invalid_date_range": "„Bewohnt ab“ muss vor „Bewohnt bis“ liegen."
+      }
+    },
+    "kostenposition": {
+      "initiate_flow": {
+        "user": "Kostenposition hinzufügen",
+        "reconfigure": "Kostenposition bearbeiten"
+      },
+      "step": {
+        "user": {
+          "title": "Kostenposition anlegen",
+          "description": "Wähle zuerst Zuordnung und Modus. Die weiteren Felder richten sich danach."
+        }
+      },
+      "error": {
+        "invalid_combination": "Diese Kombination aus Zuordnung, Modus und Verteilung ist nicht gültig. Siehe Doku."
+      }
+    }
+  },
+  "services": {
+    "add_einmalig": {
+      "name": "Einmalige Kostenposition hinzufügen",
+      "description": "Fügt eine einmalige Kostenposition hinzu (z. B. Reparatur, Handwerkerrechnung).",
+      "fields": {}
+    },
+    "mark_paid": {
+      "name": "Als bezahlt markieren",
+      "description": "Markiert eine Kostenposition als bezahlt.",
+      "fields": {}
+    }
+  },
+  "entity": {
+    "sensor": {
+      "partei_monat_aktuell": {
+        "name": "{partei} – Kosten diesen Monat"
+      },
+      "partei_jahr_aktuell": {
+        "name": "{partei} – Kosten {jahr}"
+      },
+      "partei_jahr_budget": {
+        "name": "{partei} – Budget {jahr}"
+      },
+      "partei_naechste_faelligkeit": {
+        "name": "{partei} – Nächste Fälligkeit"
+      },
+      "partei_kategorie_jahr": {
+        "name": "{partei} – {kategorie} {jahr}"
+      },
+      "haus_jahr_gesamt": {
+        "name": "Haus – Gesamtkosten {jahr}"
+      },
+      "haus_jahr_budget": {
+        "name": "Haus – Budget {jahr}"
+      },
+      "haus_kategorie_jahr": {
+        "name": "Haus – {kategorie} {jahr}"
+      },
+      "naechste_faelligkeit": {
+        "name": "Nächste Fälligkeit"
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "domain": "hauskosten",
+  "name": "Hauskosten",
+  "codeowners": ["@TheRealSimon42"],
+  "config_flow": true,
+  "documentation": "https://github.com/TheRealSimon42/ha-hauskosten",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/TheRealSimon42/ha-hauskosten/issues",
+  "requirements": [],
+  "version": "0.0.1"
+}
