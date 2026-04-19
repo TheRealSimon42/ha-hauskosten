@@ -7,15 +7,12 @@ phase 1.11 via the config-flow-dev agent. See docs/ONBOARDING.md.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import voluptuous as vol
-from homeassistant.config_entries import ConfigFlow
+from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 
 from .const import CONF_HAUS_NAME, DOMAIN
-
-if TYPE_CHECKING:
-    from homeassistant.config_entries import ConfigFlowResult
 
 
 class HauskostenConfigFlow(ConfigFlow, domain=DOMAIN):
