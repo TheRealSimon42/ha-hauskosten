@@ -10,10 +10,9 @@
 
 ## Wie getestet?
 
-<!--
-- [ ] Automatisiert: `pytest`
-- [ ] Manuell: in lokaler HA-Dev-Instanz, Schritt-für-Schritt
--->
+- [ ] Automatisiert: `pytest` — alle Tests grün
+- [ ] Manuell in lokaler HA-Dev-Instanz verifiziert (Config-Flow, Reload, Entity-States)
+- [ ] Nicht testbar (Doku / reine Config / reines Refactor) — bitte kurz begründen
 
 ## Zugehörige Issues
 
