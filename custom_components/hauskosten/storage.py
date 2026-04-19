@@ -240,7 +240,11 @@ class HauskostenStore:
         self._adhoc = []
         self._paid = {}
         if data is not None:
-            raw_adhoc = data.get("ad_hoc_kosten")
+            # Treat the loaded payload as untyped: the on-disk file can be
+            # hand-edited or left behind by a buggy older version, so we
+            # cannot trust the declared StoredData shape at runtime.
+            raw_data: dict[str, Any] = cast("dict[str, Any]", data)
+            raw_adhoc: Any = raw_data.get("ad_hoc_kosten")
             if isinstance(raw_adhoc, list):
                 self._adhoc = [
                     _deserialise_adhoc(entry)
@@ -252,7 +256,7 @@ class HauskostenStore:
                     "Stored ad_hoc_kosten is not a list (entry=%s) - ignoring",
                     self._entry_id,
                 )
-            raw_paid = data.get("paid_records")
+            raw_paid: Any = raw_data.get("paid_records")
             if isinstance(raw_paid, dict):
                 for kp_id, raw_date in raw_paid.items():
                     parsed = self._parse_date(raw_date, context=f"paid[{kp_id}]")
