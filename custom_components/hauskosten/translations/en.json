@@ -132,10 +132,7 @@
         },
         "subzaehler": {
           "title": "Sub-meter per party",
-          "description": "A consumption sensor must be referenced for every active party.",
-          "data_description": {
-            "partei": "entity_id of this party's sub-meter."
-          }
+          "description": "A consumption sensor must be referenced for every active party."
         },
         "reconfigure": {
           "title": "Edit Cost Item",

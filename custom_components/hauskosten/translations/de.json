@@ -132,10 +132,7 @@
         },
         "subzaehler": {
           "title": "Subzähler pro Partei",
-          "description": "Für jede aktive Partei muss ein Verbrauchs-Sensor referenziert werden.",
-          "data_description": {
-            "partei": "entity_id des Subzählers dieser Partei."
-          }
+          "description": "Für jede aktive Partei muss ein Verbrauchs-Sensor referenziert werden."
         },
         "reconfigure": {
           "title": "Kostenposition bearbeiten",
