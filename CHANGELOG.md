@@ -25,6 +25,17 @@ Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Google-Style-Docstrings für alle TypedDicts und StrEnums, expliziter
   `__all__`-Export. Smoke-Tests in `tests/test_models.py` verankern die
   Enum-Werte (Schema-Kontrakt) und die TypedDict-Feldmengen.
+- Storage-Schicht `storage.py` (`HauskostenStore`) über
+  `homeassistant.helpers.storage.Store`: eine Store-Datei pro
+  `ConfigEntry` (Key `hauskosten.{entry_id}`), persistiert
+  `ad_hoc_kosten` (Service `add_einmalig`) und `paid_records`
+  (Service `mark_paid`). Public API: `async_load`, `async_save`,
+  `async_add_adhoc`, `async_remove_adhoc`, `async_mark_paid` plus
+  defensive Copy-Getter `adhoc_kosten` / `paid_records`. ISO-Date
+  Serialisierung/Deserialisierung mit Warn-Logging bei kaputten
+  Feldern, Migrations-Hook (`_async_migrate_func`) für künftige
+  Schema-Versionen. 100 % Line + Branch Coverage via
+  `tests/test_storage.py`.
 
 ### Changed
 
