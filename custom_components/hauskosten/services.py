@@ -170,11 +170,12 @@ def _resolve_entry_slot(
             raise ServiceValidationError(
                 "entry_id is required when multiple hauskosten entries exist"
             )
-        slot = next(iter(entries.values()))
+        slot: dict[str, Any] = next(iter(entries.values()))
     else:
-        slot = entries.get(entry_id)
-        if slot is None:
+        resolved = entries.get(entry_id)
+        if resolved is None:
             raise ServiceValidationError(f"Unknown hauskosten entry_id: {entry_id}")
+        slot = resolved
     return slot["store"], slot["coordinator"]
 
 
