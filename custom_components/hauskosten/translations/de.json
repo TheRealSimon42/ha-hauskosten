@@ -31,6 +31,23 @@
       "step": {
         "user": {
           "title": "Partei anlegen",
+          "description": "Felder mit * sind Pflicht. Der Name muss eindeutig sein.",
+          "data": {
+            "name": "Name der Partei",
+            "flaeche_qm": "Wohnfläche (m²)",
+            "personen": "Anzahl Personen",
+            "bewohnt_ab": "Bewohnt ab",
+            "bewohnt_bis": "Bewohnt bis (optional)",
+            "hinweis": "Hinweis (optional)"
+          },
+          "data_description": {
+            "name": "z. B. \"OG (Simon)\", \"DG (Mieter Müller)\"",
+            "bewohnt_bis": "Leer lassen für aktuell bewohnt"
+          }
+        },
+        "reconfigure": {
+          "title": "Partei bearbeiten",
+          "description": "Ändere die Stammdaten dieser Partei. Der Name muss weiterhin eindeutig sein.",
           "data": {
             "name": "Name der Partei",
             "flaeche_qm": "Wohnfläche (m²)",
@@ -46,10 +63,16 @@
         }
       },
       "error": {
+        "name_required": "Der Name darf nicht leer sein.",
+        "name_too_long": "Der Name darf maximal 50 Zeichen haben.",
         "name_not_unique": "Eine Partei mit diesem Namen existiert bereits.",
         "invalid_flaeche": "Die Fläche muss zwischen 0 und 1000 m² liegen.",
         "invalid_personen": "Die Personenzahl muss zwischen 0 und 20 liegen.",
-        "invalid_date_range": "„Bewohnt ab“ muss vor „Bewohnt bis“ liegen."
+        "invalid_date_range": "„Bewohnt ab“ muss vor oder gleich „Bewohnt bis“ liegen."
+      },
+      "abort": {
+        "reconfigure_successful": "Partei wurde aktualisiert.",
+        "unknown_subentry": "Diese Partei existiert nicht mehr."
       }
     },
     "kostenposition": {
@@ -61,11 +84,145 @@
       "step": {
         "user": {
           "title": "Kostenposition anlegen",
-          "description": "Wähle zuerst Zuordnung und Modus. Die weiteren Felder richten sich danach."
+          "description": "Wähle zuerst Zuordnung und Modus. Die weiteren Felder richten sich danach.",
+          "data": {
+            "bezeichnung": "Bezeichnung",
+            "kategorie": "Kategorie",
+            "zuordnung": "Zuordnung",
+            "betragsmodus": "Betragsmodus"
+          },
+          "data_description": {
+            "bezeichnung": "z. B. \"Gebäudeversicherung\"",
+            "zuordnung": "Haus = auf Parteien verteilen. Partei = gehört einer Partei direkt.",
+            "betragsmodus": "Pauschal = fester Betrag pro Periode. Verbrauch = Einheitspreis × Verbrauch."
+          }
+        },
+        "details": {
+          "title": "Detail-Angaben",
+          "description": "Je nach Auswahl: Partei-Zuordnung, Pauschal-Betrag oder Verbrauchs-Entity.",
+          "data": {
+            "zuordnung_partei_id": "Zielpartei",
+            "betrag_eur": "Betrag (€)",
+            "periodizitaet": "Periodizität",
+            "faelligkeit": "Nächste Fälligkeit",
+            "verbrauchs_entity": "Verbrauchs-Sensor",
+            "einheitspreis_eur": "Einheitspreis (€)",
+            "einheit": "Einheit",
+            "grundgebuehr_eur_monat": "Grundgebühr pro Monat (optional, €)"
+          },
+          "data_description": {
+            "faelligkeit": "Anker für wiederkehrende Zahlungen.",
+            "grundgebuehr_eur_monat": "Leer lassen wenn keine Grundgebühr anfällt."
+          }
+        },
+        "verteilung": {
+          "title": "Verteilung & Laufzeit",
+          "description": "Wähle Verteilschlüssel und optionale Aktiv-Zeitspanne.",
+          "data": {
+            "verteilung": "Verteilschlüssel",
+            "aktiv_ab": "Aktiv ab (optional)",
+            "aktiv_bis": "Aktiv bis (optional)",
+            "notiz": "Notiz (optional)"
+          },
+          "data_description": {
+            "verteilung": "Welche Verteilung auf die Parteien angewendet wird.",
+            "aktiv_ab": "Nur relevant für saisonale Kosten (z. B. Heizung Okt–Apr).",
+            "aktiv_bis": "Nur relevant für saisonale Kosten."
+          }
+        },
+        "subzaehler": {
+          "title": "Subzähler pro Partei",
+          "description": "Für jede aktive Partei muss ein Verbrauchs-Sensor referenziert werden."
+        },
+        "reconfigure": {
+          "title": "Kostenposition bearbeiten",
+          "description": "Passe Zuordnung und Modus an. Die Folge-Schritte zeigen die heutigen Werte.",
+          "data": {
+            "bezeichnung": "Bezeichnung",
+            "kategorie": "Kategorie",
+            "zuordnung": "Zuordnung",
+            "betragsmodus": "Betragsmodus"
+          },
+          "data_description": {
+            "bezeichnung": "z. B. \"Gebäudeversicherung\""
+          }
         }
       },
       "error": {
-        "invalid_combination": "Diese Kombination aus Zuordnung, Modus und Verteilung ist nicht gültig. Siehe Doku."
+        "bezeichnung_required": "Die Bezeichnung darf nicht leer sein.",
+        "bezeichnung_too_long": "Die Bezeichnung darf maximal 50 Zeichen haben.",
+        "invalid_combination": "Diese Kombination aus Zuordnung, Modus und Verteilung ist nicht gültig. Siehe Doku.",
+        "no_parteien": "Es gibt keine Parteien in diesem Haus. Lege zuerst mindestens eine Partei an.",
+        "partei_required": "Wähle eine Partei aus.",
+        "betrag_required": "Betrag ist Pflicht und muss ≥ 0 sein.",
+        "periodizitaet_required": "Periodizität ist Pflicht.",
+        "faelligkeit_required": "Fälligkeit ist Pflicht.",
+        "verbrauchs_entity_required": "Verbrauchs-Sensor ist Pflicht.",
+        "einheitspreis_required": "Einheitspreis ist Pflicht und muss ≥ 0 sein.",
+        "einheit_required": "Einheit ist Pflicht.",
+        "verteilung_required": "Verteilschlüssel ist Pflicht.",
+        "invalid_date_range": "„Aktiv ab“ muss vor oder gleich „Aktiv bis“ liegen.",
+        "subzaehler_missing": "Für jede Partei muss ein Subzähler referenziert werden."
+      },
+      "abort": {
+        "reconfigure_successful": "Kostenposition wurde aktualisiert.",
+        "unknown_subentry": "Diese Kostenposition existiert nicht mehr.",
+        "no_parteien": "Es gibt keine Parteien in diesem Haus. Lege zuerst mindestens eine Partei an."
+      }
+    }
+  },
+  "selector": {
+    "kategorie": {
+      "options": {
+        "versicherung": "Versicherung",
+        "muell": "Müll",
+        "wasser": "Wasser",
+        "abwasser": "Abwasser",
+        "strom": "Strom",
+        "heizung": "Heizung",
+        "wartung": "Wartung",
+        "grund": "Grundsteuer",
+        "hausgeld": "Hausgeld",
+        "kommunikation": "Kommunikation",
+        "reinigung": "Reinigung",
+        "sonstiges": "Sonstiges"
+      }
+    },
+    "zuordnung": {
+      "options": {
+        "haus": "Haus (auf Parteien verteilen)",
+        "partei": "Partei (gehört einer Partei direkt)"
+      }
+    },
+    "betragsmodus": {
+      "options": {
+        "pauschal": "Pauschal (fester Betrag)",
+        "verbrauch": "Verbrauch (Einheitspreis × Verbrauch)"
+      }
+    },
+    "periodizitaet": {
+      "options": {
+        "monatlich": "Monatlich",
+        "quartalsweise": "Quartalsweise",
+        "halbjaehrlich": "Halbjährlich",
+        "jaehrlich": "Jährlich",
+        "einmalig": "Einmalig"
+      }
+    },
+    "einheit": {
+      "options": {
+        "m3": "Kubikmeter (m³)",
+        "kwh": "Kilowattstunden (kWh)",
+        "liter": "Liter"
+      }
+    },
+    "verteilung": {
+      "options": {
+        "direkt": "Direkt (100 % an die zugeordnete Partei)",
+        "gleich": "Gleich (kopfteilig)",
+        "flaeche": "Nach Fläche (m²)",
+        "personen": "Nach Personenzahl",
+        "verbrauch": "Nach Einzelverbrauch (Subzähler)"
       }
     }
   },

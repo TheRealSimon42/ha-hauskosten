@@ -50,6 +50,34 @@ Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   positionsweise markiert (Coordinator lebt weiter);
   unerwartete Exceptions werden zu `UpdateFailed`. 100 % Line +
   Branch Coverage auf coordinator.py via `tests/test_coordinator.py`.
+- Vollständiger Config-Flow `config_flow.py`:
+  * `HauskostenConfigFlow` — Haus anlegen (unique_id-Abort bei
+    Duplikaten, server-seitige Name-Validierung).
+  * `ParteiSubentryFlow` — Create + Reconfigure für Wohneinheiten
+    mit Uniqueness-, Range-, Datumsrange-Validierung und Pre-Fill
+    bei Reconfigure.
+  * `KostenpositionSubentryFlow` — Multi-Step-Flow (basis →
+    details → verteilung → optional subzaehler) mit dynamischen
+    Schemas je nach Zuordnung/Betragsmodus. Validierungsmatrix
+    aus `docs/DATA_MODEL.md` ist via Table-Lookup
+    `_ALLOWED_VERTEILUNGEN` erzwungen; das SelectSelector-Feld
+    für `verteilung` zeigt nur gültige Optionen und der Server-Side-
+    Validator weist fremde Werte mit `invalid_combination` ab.
+    `VERBRAUCH_SUBZAEHLER` öffnet einen zusätzlichen Step mit
+    einem `EntitySelector` pro aktiver Partei. Reconfigure lädt
+    alle Werte vor und verwendet `async_update_and_abort`.
+  * Alle User-Facing-Texte via `strings.json` / `translations/de.json`
+    / `translations/en.json` mit vollen Keys für Title, Description,
+    Data, Data-Description, Error und Abort pro Step; zentrale
+    Selector-Übersetzungen für `kategorie`, `zuordnung`,
+    `betragsmodus`, `periodizitaet`, `einheit`, `verteilung`.
+  * 94 % Line + Branch Coverage auf config_flow.py via
+    `tests/test_config_flow.py` (45 Tests, 268 Tests gesamt,
+    Gesamt-Coverage 97.76 %).
+- `tests/conftest.py`: Strippt nicht existente Einträge aus
+  `custom_components.__path__`, damit HAs `_get_custom_components`
+  nicht am `__editable__`-Placeholder von pip-editable-Installs
+  scheitert.
 
 ### Changed
 
