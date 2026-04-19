@@ -7,19 +7,22 @@ Siehe .claude/agents/test-writer.md fuer Konventionen.
 from __future__ import annotations
 
 from datetime import date
+from importlib.util import find_spec
 from typing import Any
 
 import pytest
 
-# Enable pytest-homeassistant-custom-component auto-mode
-pytest_plugins = ["pytest_homeassistant_custom_component"]
+# Enable pytest-homeassistant-custom-component auto-mode when the plugin is
+# installed. Pure-logic tests (distribution.py, calculations.py) do not need
+# it and run in leaner environments where HA is not available.
+if find_spec("pytest_homeassistant_custom_component") is not None:
+    pytest_plugins = ["pytest_homeassistant_custom_component"]
 
-
-@pytest.fixture(autouse=True)
-def auto_enable_custom_integrations(
-    enable_custom_integrations: None,
-) -> None:
-    """Enable loading of custom integrations in tests."""
+    @pytest.fixture(autouse=True)
+    def auto_enable_custom_integrations(
+        enable_custom_integrations: None,
+    ) -> None:
+        """Enable loading of custom integrations in tests."""
 
 
 @pytest.fixture
