@@ -16,6 +16,11 @@ Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   (`direkt`, `gleich`, `flaeche`, `personen`, `verbrauch` Subzähler) inkl.
   Zeitgewichtung bei Mieterwechsel und Rundungskorrektur. Vollständige
   Testabdeckung (100 % Line + Branch) via `tests/test_distribution.py`.
+- Pure-Logik-Modul `calculations.py` mit Zeit- und Betragsrechnung:
+  `annualize`, `monthly_share`, `next_due_date`, `active_in_period`,
+  `days_overlap`, `effektive_tage`, `resolve_verbrauchs_betrag`.
+  Vollständige Testabdeckung (100 % Line + Branch) via
+  `tests/test_calculations.py`.
 
 ### Changed
 

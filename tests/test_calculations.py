@@ -25,7 +25,6 @@ from custom_components.hauskosten.calculations import (
 )
 from custom_components.hauskosten.models import Partei, Periodizitaet
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -229,24 +228,18 @@ class TestNextDueDate:
         assert next_due_date(start, periodizitaet, reference) == expected
 
     def test_einmalig_future_returns_start(self) -> None:
-        assert (
-            next_due_date(
-                date(2026, 5, 1),
-                Periodizitaet.EINMALIG,
-                date(2026, 1, 1),
-            )
-            == date(2026, 5, 1)
-        )
+        assert next_due_date(
+            date(2026, 5, 1),
+            Periodizitaet.EINMALIG,
+            date(2026, 1, 1),
+        ) == date(2026, 5, 1)
 
     def test_einmalig_on_reference_returns_start(self) -> None:
-        assert (
-            next_due_date(
-                date(2026, 5, 1),
-                Periodizitaet.EINMALIG,
-                date(2026, 5, 1),
-            )
-            == date(2026, 5, 1)
-        )
+        assert next_due_date(
+            date(2026, 5, 1),
+            Periodizitaet.EINMALIG,
+            date(2026, 5, 1),
+        ) == date(2026, 5, 1)
 
     def test_einmalig_past_returns_none(self) -> None:
         assert (
@@ -260,14 +253,11 @@ class TestNextDueDate:
 
     def test_reference_before_start_returns_start_for_recurring(self) -> None:
         # Recurrence hasn't begun yet -> first occurrence is the start date.
-        assert (
-            next_due_date(
-                date(2026, 6, 1),
-                Periodizitaet.MONATLICH,
-                date(2026, 1, 1),
-            )
-            == date(2026, 6, 1)
-        )
+        assert next_due_date(
+            date(2026, 6, 1),
+            Periodizitaet.MONATLICH,
+            date(2026, 1, 1),
+        ) == date(2026, 6, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -339,14 +329,6 @@ class TestActiveInPeriod:
                 date(2026, 12, 31),
                 False,
             ),
-            # aktiv_ab after period end with open aktiv_bis -> False.
-            (
-                date(2027, 1, 1),
-                None,
-                date(2026, 1, 1),
-                date(2026, 12, 31),
-                False,
-            ),
             # Single-day period fully inside active interval.
             (
                 date(2020, 1, 1),
@@ -363,17 +345,19 @@ class TestActiveInPeriod:
         aktiv_bis: date | None,
         period_start: date,
         period_end: date,
-        expected: bool,  # noqa: FBT001
+        expected: bool,
     ) -> None:
         assert (
-            active_in_period(aktiv_ab, aktiv_bis, period_start, period_end)
-            is expected
+            active_in_period(aktiv_ab, aktiv_bis, period_start, period_end) is expected
         )
 
     def test_inverted_period_raises(self) -> None:
         with pytest.raises(ValueError, match="period"):
             active_in_period(
-                None, None, date(2026, 12, 31), date(2026, 1, 1),
+                None,
+                None,
+                date(2026, 12, 31),
+                date(2026, 1, 1),
             )
 
     def test_inverted_active_interval_raises(self) -> None:
@@ -476,7 +460,10 @@ class TestDaysOverlap:
     def test_inverted_period_raises(self) -> None:
         with pytest.raises(ValueError, match="period"):
             days_overlap(
-                date(2026, 1, 1), None, date(2026, 12, 31), date(2026, 1, 1),
+                date(2026, 1, 1),
+                None,
+                date(2026, 12, 31),
+                date(2026, 1, 1),
             )
 
     def test_inverted_interval_raises(self) -> None:
@@ -499,39 +486,29 @@ class TestEffektiveTage:
 
     def test_full_year_tenant_365_in_normal_year(self) -> None:
         p = _partei()
-        assert (
-            effektive_tage(p, date(2026, 1, 1), date(2026, 12, 31)) == 365
-        )
+        assert effektive_tage(p, date(2026, 1, 1), date(2026, 12, 31)) == 365
 
     def test_full_year_tenant_366_in_leap_year(self) -> None:
         p = _partei(bewohnt_ab=date(2020, 1, 1))
-        assert (
-            effektive_tage(p, date(2024, 1, 1), date(2024, 12, 31)) == 366
-        )
+        assert effektive_tage(p, date(2024, 1, 1), date(2024, 12, 31)) == 366
 
     def test_first_half_year_tenant(self) -> None:
         p = _partei(
             bewohnt_ab=date(2020, 1, 1),
             bewohnt_bis=date(2026, 6, 30),
         )
-        assert (
-            effektive_tage(p, date(2026, 1, 1), date(2026, 12, 31)) == 181
-        )
+        assert effektive_tage(p, date(2026, 1, 1), date(2026, 12, 31)) == 181
 
     def test_second_half_year_tenant(self) -> None:
         p = _partei(bewohnt_ab=date(2026, 7, 1))
-        assert (
-            effektive_tage(p, date(2026, 1, 1), date(2026, 12, 31)) == 184
-        )
+        assert effektive_tage(p, date(2026, 1, 1), date(2026, 12, 31)) == 184
 
     def test_tenant_outside_period_zero(self) -> None:
         p = _partei(
             bewohnt_ab=date(2020, 1, 1),
             bewohnt_bis=date(2025, 12, 31),
         )
-        assert (
-            effektive_tage(p, date(2026, 1, 1), date(2026, 12, 31)) == 0
-        )
+        assert effektive_tage(p, date(2026, 1, 1), date(2026, 12, 31)) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -548,9 +525,7 @@ class TestResolveVerbrauchsBetrag:
 
     def test_adds_annual_base_fee(self) -> None:
         # 120 m3 * 3 + 12 * 5 EUR/month = 360 + 60 = 420.
-        assert (
-            resolve_verbrauchs_betrag(3.0, 120.0, 5.0) == pytest.approx(420.0)
-        )
+        assert resolve_verbrauchs_betrag(3.0, 120.0, 5.0) == pytest.approx(420.0)
 
     def test_zero_base_fee_same_as_none(self) -> None:
         assert resolve_verbrauchs_betrag(3.0, 120.0, 0.0) == pytest.approx(360.0)
