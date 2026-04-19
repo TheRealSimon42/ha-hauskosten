@@ -13,11 +13,14 @@ engines:
     enabled: false  # wir nutzen ruff
   bandit:
     enabled: true
+  trivy:
+    enabled: true   # Dependency-Vuln-Scan (pyproject.toml, manifest.json requirements)
 
 exclude_paths:
   - tests/**
   - docs/**
   - .github/**
   - .claude/**
+  - .chglog/**
   - "**/__pycache__/**"
   - "**/*.pyc"
