@@ -6,18 +6,17 @@ distribution/calculations tests exist.
 
 from __future__ import annotations
 
+import custom_components.hauskosten as pkg
+from custom_components.hauskosten import const
+
 
 def test_package_imports() -> None:
     """The hauskosten package module imports without side-effects."""
-    import custom_components.hauskosten as pkg
-
     assert pkg.PLATFORMS == ["sensor"]
 
 
 def test_constants_defined() -> None:
     """Core constants are exposed as expected by docs/DATA_MODEL.md."""
-    from custom_components.hauskosten import const
-
     assert const.DOMAIN == "hauskosten"
     assert const.CONF_SCHEMA_VERSION >= 1
     assert const.SUBENTRY_PARTEI == "partei"
