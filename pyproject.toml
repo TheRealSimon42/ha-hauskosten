@@ -60,10 +60,11 @@ select = [
     "TRY",  # try/except antipatterns
 ]
 ignore = [
-    "D203",   # conflict with D211
-    "D213",   # conflict with D212
-    "ANN401", # Any sometimes legit (HA config dicts)
+    "D203",    # conflict with D211
+    "D213",    # conflict with D212
+    "ANN401",  # Any sometimes legit (HA config dicts)
     "PLR0913", # too many arguments (HA callbacks need many)
+    "TRY003",  # long error messages inline are acceptable for diagnostics
 ]
 
 [tool.ruff.lint.per-file-ignores]
