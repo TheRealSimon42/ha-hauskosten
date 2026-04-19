@@ -6,6 +6,7 @@ Siehe .claude/agents/test-writer.md fuer Konventionen.
 
 from __future__ import annotations
 
+import pathlib
 from datetime import date
 from importlib.util import find_spec
 from typing import Any
@@ -17,6 +18,22 @@ import pytest
 # it and run in leaner environments where HA is not available.
 if find_spec("pytest_homeassistant_custom_component") is not None:
     pytest_plugins = ["pytest_homeassistant_custom_component"]
+
+    # Editable pip installs (``pip install -e .``) inject a fake placeholder
+    # path into ``custom_components.__path__`` (``__editable__...path_hook__``).
+    # HA's ``_get_custom_components`` tries to iterate every entry of that
+    # list and raises ``FileNotFoundError`` on the placeholder.  We strip any
+    # non-existent path once per test session so the custom integration can
+    # be discovered via the *real* on-disk location.
+    import custom_components
+
+    _real_paths = [
+        p for p in list(custom_components.__path__) if pathlib.Path(p).is_dir()
+    ]
+    # ``__path__`` supports slice-assignment even for ``_NamespacePath``; using
+    # that avoids replacing the container itself (HA relies on the live
+    # ``_NamespacePath`` object to react to further finder insertions).
+    custom_components.__path__[:] = _real_paths
 
     @pytest.fixture(autouse=True)
     def auto_enable_custom_integrations(

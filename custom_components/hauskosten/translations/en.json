@@ -31,6 +31,23 @@
       "step": {
         "user": {
           "title": "Create Party",
+          "description": "Fields marked with * are required. Name must be unique.",
+          "data": {
+            "name": "Party name",
+            "flaeche_qm": "Living area (m²)",
+            "personen": "Number of persons",
+            "bewohnt_ab": "Occupied from",
+            "bewohnt_bis": "Occupied until (optional)",
+            "hinweis": "Note (optional)"
+          },
+          "data_description": {
+            "name": "e.g. \"Upper floor\", \"Attic tenant\"",
+            "bewohnt_bis": "Leave empty for currently occupied"
+          }
+        },
+        "reconfigure": {
+          "title": "Edit Party",
+          "description": "Update the master data for this party. The name still has to be unique.",
           "data": {
             "name": "Party name",
             "flaeche_qm": "Living area (m²)",
@@ -46,10 +63,16 @@
         }
       },
       "error": {
+        "name_required": "Name must not be empty.",
+        "name_too_long": "Name must be 50 characters or less.",
         "name_not_unique": "A party with this name already exists.",
         "invalid_flaeche": "Area must be between 0 and 1000 m².",
         "invalid_personen": "Number of persons must be between 0 and 20.",
-        "invalid_date_range": "\"Occupied from\" must be before \"Occupied until\"."
+        "invalid_date_range": "\"Occupied from\" must be on or before \"Occupied until\"."
+      },
+      "abort": {
+        "reconfigure_successful": "Party updated.",
+        "unknown_subentry": "This party no longer exists."
       }
     },
     "kostenposition": {
@@ -61,11 +84,148 @@
       "step": {
         "user": {
           "title": "Create Cost Item",
-          "description": "Select assignment and mode first. The remaining fields will adapt accordingly."
+          "description": "Select assignment and mode first. The remaining fields will adapt accordingly.",
+          "data": {
+            "bezeichnung": "Label",
+            "kategorie": "Category",
+            "zuordnung": "Assignment",
+            "betragsmodus": "Amount mode"
+          },
+          "data_description": {
+            "bezeichnung": "e.g. \"Building insurance\"",
+            "zuordnung": "House = distribute across parties. Party = belongs to a single party.",
+            "betragsmodus": "Pauschal = fixed amount per cadence. Verbrauch = unit price × consumption."
+          }
+        },
+        "details": {
+          "title": "Details",
+          "description": "Depending on selection: target party, flat amount, or consumption entity.",
+          "data": {
+            "zuordnung_partei_id": "Target party",
+            "betrag_eur": "Amount (EUR)",
+            "periodizitaet": "Cadence",
+            "faelligkeit": "Next due date",
+            "verbrauchs_entity": "Consumption sensor",
+            "einheitspreis_eur": "Unit price (EUR)",
+            "einheit": "Unit",
+            "grundgebuehr_eur_monat": "Monthly base fee (optional, EUR)"
+          },
+          "data_description": {
+            "faelligkeit": "Anchor for recurring payments.",
+            "grundgebuehr_eur_monat": "Leave empty when there is no base fee."
+          }
+        },
+        "verteilung": {
+          "title": "Distribution & period",
+          "description": "Pick the distribution key and optional active range.",
+          "data": {
+            "verteilung": "Distribution key",
+            "aktiv_ab": "Active from (optional)",
+            "aktiv_bis": "Active until (optional)",
+            "notiz": "Note (optional)"
+          },
+          "data_description": {
+            "verteilung": "Which distribution is applied across parties.",
+            "aktiv_ab": "Only relevant for seasonal costs (e.g. heating Oct–Apr).",
+            "aktiv_bis": "Only relevant for seasonal costs."
+          }
+        },
+        "subzaehler": {
+          "title": "Sub-meter per party",
+          "description": "A consumption sensor must be referenced for every active party.",
+          "data_description": {
+            "partei": "entity_id of this party's sub-meter."
+          }
+        },
+        "reconfigure": {
+          "title": "Edit Cost Item",
+          "description": "Change assignment and mode. Follow-up steps will show the current values.",
+          "data": {
+            "bezeichnung": "Label",
+            "kategorie": "Category",
+            "zuordnung": "Assignment",
+            "betragsmodus": "Amount mode"
+          },
+          "data_description": {
+            "bezeichnung": "e.g. \"Building insurance\""
+          }
         }
       },
       "error": {
-        "invalid_combination": "This combination of assignment, mode and distribution key is invalid. See docs."
+        "bezeichnung_required": "Label must not be empty.",
+        "bezeichnung_too_long": "Label must be 50 characters or less.",
+        "invalid_combination": "This combination of assignment, mode and distribution key is invalid. See docs.",
+        "no_parteien": "There are no parties in this house yet. Create at least one party first.",
+        "partei_required": "Select a party.",
+        "betrag_required": "Amount is required and must be >= 0.",
+        "periodizitaet_required": "Cadence is required.",
+        "faelligkeit_required": "Due date is required.",
+        "verbrauchs_entity_required": "Consumption sensor is required.",
+        "einheitspreis_required": "Unit price is required and must be >= 0.",
+        "einheit_required": "Unit is required.",
+        "verteilung_required": "Distribution key is required.",
+        "invalid_date_range": "\"Active from\" must be on or before \"Active until\".",
+        "subzaehler_missing": "A sub-meter must be referenced for every party."
+      },
+      "abort": {
+        "reconfigure_successful": "Cost item updated.",
+        "unknown_subentry": "This cost item no longer exists.",
+        "no_parteien": "There are no parties in this house yet. Create at least one party first."
+      }
+    }
+  },
+  "selector": {
+    "kategorie": {
+      "options": {
+        "versicherung": "Insurance",
+        "muell": "Waste",
+        "wasser": "Water",
+        "abwasser": "Sewage",
+        "strom": "Electricity",
+        "heizung": "Heating",
+        "wartung": "Maintenance",
+        "grund": "Property tax",
+        "hausgeld": "House fee (WEG)",
+        "kommunikation": "Communication",
+        "reinigung": "Cleaning",
+        "sonstiges": "Other"
+      }
+    },
+    "zuordnung": {
+      "options": {
+        "haus": "House (distribute to parties)",
+        "partei": "Party (owned by one party)"
+      }
+    },
+    "betragsmodus": {
+      "options": {
+        "pauschal": "Flat amount",
+        "verbrauch": "Consumption (price x usage)"
+      }
+    },
+    "periodizitaet": {
+      "options": {
+        "monatlich": "Monthly",
+        "quartalsweise": "Quarterly",
+        "halbjaehrlich": "Semi-annual",
+        "jaehrlich": "Annual",
+        "einmalig": "One-off"
+      }
+    },
+    "einheit": {
+      "options": {
+        "m3": "Cubic meters (m³)",
+        "kwh": "Kilowatt-hours (kWh)",
+        "liter": "Liters"
+      }
+    },
+    "verteilung": {
+      "options": {
+        "direkt": "Direct (100% to the assigned party)",
+        "gleich": "Equal (per head)",
+        "flaeche": "By area (m²)",
+        "personen": "By head count",
+        "verbrauch": "By individual consumption (sub-meter)"
       }
     }
   },
