@@ -254,12 +254,10 @@ class HauskostenCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # state; we only need it when at least one ABSCHLAG position is
         # configured.
         try:
-            # ``get_instance`` lives on the recorder package but is not in
-            # its ``__all__`` -- the attr-defined ignore is the canonical
-            # workaround HA core itself uses.
-            from homeassistant.components.recorder import (  # noqa: PLC0415
-                get_instance,  # type: ignore[attr-defined]
-            )
+            # Import the package (not ``get_instance`` directly) so mypy
+            # doesn't trip over its missing ``__all__`` export; use the
+            # attribute form at the call site instead.
+            from homeassistant.components import recorder  # noqa: PLC0415
             from homeassistant.components.recorder.statistics import (  # noqa: PLC0415
                 statistic_during_period,
             )
@@ -268,7 +266,7 @@ class HauskostenCoordinator(DataUpdateCoordinator[CoordinatorData]):
             return {kp["id"]: None for kp in abschlag_positions}
 
         try:
-            recorder = get_instance(self.hass)
+            recorder_instance = recorder.get_instance(self.hass)
         except Exception:
             _LOGGER.warning("recorder instance unavailable; abschlag IST disabled")
             return {kp["id"]: None for kp in abschlag_positions}
@@ -284,7 +282,7 @@ class HauskostenCoordinator(DataUpdateCoordinator[CoordinatorData]):
             )
             end_dt = dt_util.as_utc(now)
             try:
-                stats = await recorder.async_add_executor_job(
+                stats = await recorder_instance.async_add_executor_job(
                     statistic_during_period,
                     self.hass,
                     start_dt,
