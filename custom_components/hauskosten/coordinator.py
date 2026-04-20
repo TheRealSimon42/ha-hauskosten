@@ -254,8 +254,11 @@ class HauskostenCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # state; we only need it when at least one ABSCHLAG position is
         # configured.
         try:
+            # ``get_instance`` lives on the recorder package but is not in
+            # its ``__all__`` -- the attr-defined ignore is the canonical
+            # workaround HA core itself uses.
             from homeassistant.components.recorder import (  # noqa: PLC0415
-                get_instance,
+                get_instance,  # type: ignore[attr-defined]
             )
             from homeassistant.components.recorder.statistics import (  # noqa: PLC0415
                 statistic_during_period,

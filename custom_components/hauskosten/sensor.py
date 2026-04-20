@@ -34,7 +34,7 @@ Authoritative specs:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -739,7 +739,10 @@ class _ParteiAbschlagSensorBase(_EuroPartyMixin, ParteiSensorBase):
         pos = _find_position(self._partei_result(), self._kp_id)
         if pos is None:
             return None
-        return pos.get(field)
+        # ``.get`` on a TypedDict with a dynamic str key degrades to
+        # ``object``; the three abschlag_* fields are declared as
+        # ``float | None`` so the cast is safe for every call site.
+        return cast("float | None", pos.get(field))
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -817,7 +820,7 @@ def _sum_abschlag_field(
         pos = _find_position(partei_result, kp_id)
         if pos is None:
             continue
-        value = pos.get(field)
+        value = cast("float | None", pos.get(field))
         if value is None:
             continue
         total = value if total is None else total + value
