@@ -266,7 +266,9 @@ class HauskostenCoordinator(DataUpdateCoordinator[CoordinatorData]):
             return {kp["id"]: None for kp in abschlag_positions}
 
         try:
-            recorder_instance = recorder.get_instance(self.hass)
+            # ``get_instance`` is public but not in recorder's ``__all__``;
+            # the attr-defined ignore matches what HA core uses itself.
+            recorder_instance = recorder.get_instance(self.hass)  # type: ignore[attr-defined]
         except Exception:
             _LOGGER.warning("recorder instance unavailable; abschlag IST disabled")
             return {kp["id"]: None for kp in abschlag_positions}
