@@ -19,10 +19,10 @@ from datetime import date
 from .models import Partei, Periodizitaet
 
 __all__ = [
+    "abschlaege_gezahlt",
     "abschlag_ist_kosten",
     "abschlag_saldo",
     "abschlag_zeitraum_ende",
-    "abschlaege_gezahlt",
     "active_in_period",
     "annualize",
     "days_overlap",

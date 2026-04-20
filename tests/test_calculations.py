@@ -15,10 +15,10 @@ from datetime import date
 import pytest
 
 from custom_components.hauskosten.calculations import (
+    abschlaege_gezahlt,
     abschlag_ist_kosten,
     abschlag_saldo,
     abschlag_zeitraum_ende,
-    abschlaege_gezahlt,
     active_in_period,
     annualize,
     days_overlap,
