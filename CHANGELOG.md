@@ -9,6 +9,23 @@ Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Added
 
+- —
+
+### Changed
+
+- —
+
+### Fixed
+
+- —
+
+## [0.1.0-beta.2] - 2026-04-21
+
+Zweiter Pre-Release. Issue #10 (Abschlag-Modus mit Jahresabrechnung) ist
+durch. 368 Tests, Coverage 96.01 %, CI grün.
+
+### Added
+
 - **Abschlag-Modus** (`Betragsmodus.ABSCHLAG`) für Kostenpositionen nach dem
   Muster "monatlicher Abschlag + Jahresabrechnung" (Wasser, Heizstrom,
   Abwasser, …). Neue Felder an `Kostenposition`:
