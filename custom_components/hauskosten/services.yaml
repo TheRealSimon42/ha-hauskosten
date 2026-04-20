@@ -95,3 +95,30 @@ mark_paid:
       example: "2026-04-19"
       selector:
         date:
+
+jahresabrechnung_buchen:
+  fields:
+    entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: hauskosten
+    kostenposition_id:
+      required: true
+      example: "subentry-id-der-abschlag-position"
+      selector:
+        text:
+    final_betrag_eur:
+      required: true
+      example: 560.00
+      selector:
+        number:
+          min: 0
+          step: 0.01
+          unit_of_measurement: "€"
+          mode: box
+    abrechnungsdatum:
+      required: false
+      example: "2026-04-19"
+      selector:
+        date:

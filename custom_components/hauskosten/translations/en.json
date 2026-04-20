@@ -297,6 +297,28 @@
           "description": "Date on which the payment was made."
         }
       }
+    },
+    "jahresabrechnung_buchen": {
+      "name": "Book Annual Reconciliation",
+      "description": "Books the annual reconciliation for an Abschlag cost item: the difference between the final amount and the cumulative prepayments is recorded as a Nachzahlung, and the reconciliation period rolls forward automatically.",
+      "fields": {
+        "entry_id": {
+          "name": "House",
+          "description": "The hauskosten instance. Not required when only one house is configured."
+        },
+        "kostenposition_id": {
+          "name": "Abschlag position",
+          "description": "The ID of the Abschlag cost item (subentry_id)."
+        },
+        "final_betrag_eur": {
+          "name": "Final amount (EUR)",
+          "description": "The actual invoice amount from the utility."
+        },
+        "abrechnungsdatum": {
+          "name": "Reconciliation date",
+          "description": "Optional: date of the reconciliation. Defaults to today."
+        }
+      }
     }
   },
   "entity": {

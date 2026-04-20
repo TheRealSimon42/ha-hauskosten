@@ -31,6 +31,7 @@ from custom_components.hauskosten.const import (
     CONF_SCHEMA_VERSION,
     DOMAIN,
     SERVICE_ADD_EINMALIG,
+    SERVICE_JAHRESABRECHNUNG_BUCHEN,
     SERVICE_MARK_PAID,
     SUBENTRY_KOSTENPOSITION,
     SUBENTRY_PARTEI,
@@ -608,3 +609,257 @@ class TestServices:
                 },
                 blocking=True,
             )
+
+
+# ---------------------------------------------------------------------------
+# Service: jahresabrechnung_buchen (phase 6)
+# ---------------------------------------------------------------------------
+
+
+def _abschlag_kp_subentry(
+    *,
+    subentry_id: str = "kp-wasser",
+    bezeichnung: str = "Wasser",
+    monatlicher_abschlag_eur: float = 50.0,
+    zeitraum_start: date = date(2026, 1, 1),
+    dauer_monate: int = 12,
+) -> ConfigSubentry:
+    """Build an ABSCHLAG kostenposition subentry for service tests."""
+    data: dict[str, Any] = {
+        "bezeichnung": bezeichnung,
+        "kategorie": "wasser",
+        "zuordnung": "haus",
+        "zuordnung_partei_id": None,
+        "betragsmodus": "abschlag",
+        "betrag_eur": None,
+        "periodizitaet": None,
+        "faelligkeit": None,
+        "verbrauchs_entity": None,
+        "einheitspreis_eur": None,
+        "einheit": None,
+        "grundgebuehr_eur_monat": None,
+        "monatlicher_abschlag_eur": monatlicher_abschlag_eur,
+        "abrechnungszeitraum_start": zeitraum_start.isoformat(),
+        "abrechnungszeitraum_dauer_monate": dauer_monate,
+        "verteilung": "personen",
+        "verbrauch_entities_pro_partei": None,
+        "aktiv_ab": None,
+        "aktiv_bis": None,
+        "notiz": None,
+    }
+    return ConfigSubentry(
+        data=MappingProxyType(data),
+        subentry_id=subentry_id,
+        subentry_type=SUBENTRY_KOSTENPOSITION,
+        title=bezeichnung,
+        unique_id=None,
+    )
+
+
+class TestJahresabrechnungBuchen:
+    """Service bundles the delta into an AdHoc + rolls the period anchor."""
+
+    async def test_service_registered_after_setup(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        entry = _make_entry(_partei_subentry())
+        await _setup_entry(hass, entry)
+        assert hass.services.has_service(DOMAIN, SERVICE_JAHRESABRECHNUNG_BUCHEN)
+
+    async def test_nachzahlung_creates_adhoc_and_rolls_period(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Final > gezahlt -> Nachzahlung AdHoc + new period start."""
+        partei = _partei_subentry()
+        kp = _abschlag_kp_subentry()
+        entry = _make_entry(partei, kp)
+        await _setup_entry(hass, entry)
+        store = hass.data[DOMAIN][entry.entry_id]["store"]
+
+        # Gezahlt at 2026-07-01 = 50 * 6 = 300. Final = 560 -> Nachzahlung 260.
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_JAHRESABRECHNUNG_BUCHEN,
+            {
+                "entry_id": entry.entry_id,
+                "kostenposition_id": kp.subentry_id,
+                "final_betrag_eur": 560.0,
+                "abrechnungsdatum": date(2026, 7, 1).isoformat(),
+            },
+            blocking=True,
+        )
+        await hass.async_block_till_done()
+
+        adhocs = store.adhoc_kosten
+        assert len(adhocs) == 1
+        assert adhocs[0]["betrag_eur"] == pytest.approx(260.0)
+        assert adhocs[0]["kategorie"] == "wasser"
+        assert adhocs[0]["verteilung"] == "personen"
+        assert "Jahresabrechnung" in adhocs[0]["bezeichnung"]
+
+        # Period rolled forward 12 months: 2026-01-01 -> 2027-01-01.
+        reloaded = hass.config_entries.async_get_entry(entry.entry_id)
+        assert reloaded is not None
+        updated = reloaded.subentries[kp.subentry_id]
+        assert updated.data["abrechnungszeitraum_start"] == "2027-01-01"
+
+    async def test_guthaben_skips_adhoc_but_rolls_period(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Final < gezahlt -> no AdHoc, period still rolls."""
+        partei = _partei_subentry()
+        kp = _abschlag_kp_subentry()
+        entry = _make_entry(partei, kp)
+        await _setup_entry(hass, entry)
+        store = hass.data[DOMAIN][entry.entry_id]["store"]
+
+        # Gezahlt 300, Final 240 -> Guthaben 60, no AdHoc.
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_JAHRESABRECHNUNG_BUCHEN,
+            {
+                "entry_id": entry.entry_id,
+                "kostenposition_id": kp.subentry_id,
+                "final_betrag_eur": 240.0,
+                "abrechnungsdatum": date(2026, 7, 1).isoformat(),
+            },
+            blocking=True,
+        )
+        await hass.async_block_till_done()
+
+        assert store.adhoc_kosten == []
+        reloaded = hass.config_entries.async_get_entry(entry.entry_id)
+        assert reloaded is not None
+        updated = reloaded.subentries[kp.subentry_id]
+        assert updated.data["abrechnungszeitraum_start"] == "2027-01-01"
+
+    async def test_ausgeglichen_skips_adhoc(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Final == gezahlt -> no AdHoc."""
+        partei = _partei_subentry()
+        kp = _abschlag_kp_subentry()
+        entry = _make_entry(partei, kp)
+        await _setup_entry(hass, entry)
+        store = hass.data[DOMAIN][entry.entry_id]["store"]
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_JAHRESABRECHNUNG_BUCHEN,
+            {
+                "entry_id": entry.entry_id,
+                "kostenposition_id": kp.subentry_id,
+                "final_betrag_eur": 300.0,
+                "abrechnungsdatum": date(2026, 7, 1).isoformat(),
+            },
+            blocking=True,
+        )
+        await hass.async_block_till_done()
+        assert store.adhoc_kosten == []
+
+    async def test_unknown_kostenposition_raises(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        entry = _make_entry(_partei_subentry())
+        await _setup_entry(hass, entry)
+        with pytest.raises(ServiceValidationError):
+            await hass.services.async_call(
+                DOMAIN,
+                SERVICE_JAHRESABRECHNUNG_BUCHEN,
+                {
+                    "entry_id": entry.entry_id,
+                    "kostenposition_id": "does-not-exist",
+                    "final_betrag_eur": 100.0,
+                    "abrechnungsdatum": date(2026, 7, 1).isoformat(),
+                },
+                blocking=True,
+            )
+
+    async def test_non_abschlag_position_is_rejected(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """PAUSCHAL positions cannot be reconciled via this service."""
+        partei = _partei_subentry()
+        # PAUSCHAL kp
+        pauschal_data: dict[str, Any] = {
+            "bezeichnung": "Versicherung",
+            "kategorie": "versicherung",
+            "zuordnung": "haus",
+            "zuordnung_partei_id": None,
+            "betragsmodus": "pauschal",
+            "betrag_eur": 450.0,
+            "periodizitaet": "jaehrlich",
+            "faelligkeit": "2026-03-15",
+            "verbrauchs_entity": None,
+            "einheitspreis_eur": None,
+            "einheit": None,
+            "grundgebuehr_eur_monat": None,
+            "monatlicher_abschlag_eur": None,
+            "abrechnungszeitraum_start": None,
+            "abrechnungszeitraum_dauer_monate": None,
+            "verteilung": "flaeche",
+            "verbrauch_entities_pro_partei": None,
+            "aktiv_ab": None,
+            "aktiv_bis": None,
+            "notiz": None,
+        }
+        kp = ConfigSubentry(
+            data=MappingProxyType(pauschal_data),
+            subentry_id="kp-vers",
+            subentry_type=SUBENTRY_KOSTENPOSITION,
+            title="Versicherung",
+            unique_id=None,
+        )
+        entry = _make_entry(partei, kp)
+        await _setup_entry(hass, entry)
+        with pytest.raises(ServiceValidationError, match="not in ABSCHLAG mode"):
+            await hass.services.async_call(
+                DOMAIN,
+                SERVICE_JAHRESABRECHNUNG_BUCHEN,
+                {
+                    "entry_id": entry.entry_id,
+                    "kostenposition_id": "kp-vers",
+                    "final_betrag_eur": 500.0,
+                    "abrechnungsdatum": date(2026, 7, 1).isoformat(),
+                },
+                blocking=True,
+            )
+
+    async def test_uses_default_abrechnungsdatum_today(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Omitting abrechnungsdatum falls back to today's date."""
+        partei = _partei_subentry()
+        kp = _abschlag_kp_subentry(
+            zeitraum_start=date.today().replace(day=1),
+            dauer_monate=12,
+        )
+        entry = _make_entry(partei, kp)
+        await _setup_entry(hass, entry)
+        # Call without abrechnungsdatum -> uses today. Final == 0 and
+        # gezahlt == 0 (period just started) -> no AdHoc, just rolls.
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_JAHRESABRECHNUNG_BUCHEN,
+            {
+                "entry_id": entry.entry_id,
+                "kostenposition_id": kp.subentry_id,
+                "final_betrag_eur": 0.0,
+            },
+            blocking=True,
+        )
+        await hass.async_block_till_done()
+        # Period rolled forward.
+        reloaded = hass.config_entries.async_get_entry(entry.entry_id)
+        assert reloaded is not None
+        updated = reloaded.subentries[kp.subentry_id]
+        assert (
+            updated.data["abrechnungszeitraum_start"]
+            != kp.data["abrechnungszeitraum_start"]
+        )

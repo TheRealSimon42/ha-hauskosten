@@ -297,6 +297,28 @@
           "description": "Datum, an dem die Zahlung erfolgt ist."
         }
       }
+    },
+    "jahresabrechnung_buchen": {
+      "name": "Jahresabrechnung buchen",
+      "description": "Bucht die Jahresabrechnung einer Abschlag-Kostenposition: Differenz zwischen Final-Betrag und geleisteten Abschlägen wird als Nachzahlung verbucht, der Abrechnungszeitraum rollt automatisch weiter.",
+      "fields": {
+        "entry_id": {
+          "name": "Haus",
+          "description": "Die Hauskosten-Instanz. Nicht nötig, wenn nur ein Haus konfiguriert ist."
+        },
+        "kostenposition_id": {
+          "name": "Abschlag-Position",
+          "description": "Die ID der Abschlag-Kostenposition (subentry_id)."
+        },
+        "final_betrag_eur": {
+          "name": "Finaler Betrag (€)",
+          "description": "Der tatsächliche Rechnungsbetrag laut Abrechnung des Versorgers."
+        },
+        "abrechnungsdatum": {
+          "name": "Abrechnungsdatum",
+          "description": "Optional: Datum der Abrechnung. Default: heute."
+        }
+      }
     }
   },
   "entity": {
