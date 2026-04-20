@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -88,6 +88,9 @@ def _kp_subentry(
     einheitspreis_eur: float | None = None,
     einheit: str | None = None,
     grundgebuehr_eur_monat: float | None = None,
+    monatlicher_abschlag_eur: float | None = None,
+    abrechnungszeitraum_start: date | None = None,
+    abrechnungszeitraum_dauer_monate: int | None = None,
     verteilung: str = "flaeche",
     verbrauch_entities_pro_partei: dict[str, str] | None = None,
     aktiv_ab: date | None = None,
@@ -108,6 +111,11 @@ def _kp_subentry(
         "einheitspreis_eur": einheitspreis_eur,
         "einheit": einheit,
         "grundgebuehr_eur_monat": grundgebuehr_eur_monat,
+        "monatlicher_abschlag_eur": monatlicher_abschlag_eur,
+        "abrechnungszeitraum_start": (
+            abrechnungszeitraum_start.isoformat() if abrechnungszeitraum_start else None
+        ),
+        "abrechnungszeitraum_dauer_monate": abrechnungszeitraum_dauer_monate,
         "verteilung": verteilung,
         "verbrauch_entities_pro_partei": verbrauch_entities_pro_partei,
         "aktiv_ab": aktiv_ab.isoformat() if aktiv_ab else None,
@@ -1223,3 +1231,290 @@ class TestSubzaehlerMissingId:
         assert "subzaehler entity missing" in (
             data["parteien"]["og"]["positionen"][0]["error"] or ""
         )
+
+
+# ---------------------------------------------------------------------------
+# Abschlag (phase 3): monthly prepayment + annual reconciliation.
+# ---------------------------------------------------------------------------
+
+
+class TestAbschlagMode:
+    """ABSCHLAG positions report gezahlt / ist / saldo per party."""
+
+    async def test_abschlag_gezahlt_distributed_by_personen(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """With no consumption sensor, only the prepayment totals are present."""
+        og = _partei_subentry(
+            subentry_id="og",
+            name="OG",
+            flaeche_qm=85.0,
+            personen=2,
+        )
+        dg = _partei_subentry(
+            subentry_id="dg",
+            name="DG",
+            flaeche_qm=65.0,
+            personen=1,
+        )
+        # 50 EUR / month, period anchored 1-Jan 2026, duration 12 months.
+        # Stichtag 1-Jul 2026 -> 6 months elapsed -> 300 EUR prepaid.
+        kp = _kp_subentry(
+            subentry_id="kp-wasser",
+            bezeichnung="Wasser",
+            kategorie="wasser",
+            zuordnung="haus",
+            betragsmodus="abschlag",
+            betrag_eur=None,
+            periodizitaet=None,
+            faelligkeit=None,
+            monatlicher_abschlag_eur=50.0,
+            abrechnungszeitraum_start=date(2026, 1, 1),
+            abrechnungszeitraum_dauer_monate=12,
+            verteilung="personen",
+        )
+        entry = _make_entry(og, dg, kp)
+        coord = await _make_coordinator(hass, entry)
+
+        # Freeze clock to 1-Jul 2026 so gezahlt is deterministic.
+        fixed_now = datetime(2026, 7, 1, 12, 0, tzinfo=UTC)
+        with (
+            patch(
+                "custom_components.hauskosten.coordinator.dt_util.now",
+                return_value=fixed_now,
+            ),
+            # No consumption sensor configured -> stats fetch returns empty.
+            patch.object(
+                HauskostenCoordinator,
+                "_fetch_abschlag_verbrauch",
+                new=AsyncMock(return_value={"kp-wasser": None}),
+            ),
+        ):
+            data = await coord._async_update_data()
+
+        og_pos = data["parteien"]["og"]["positionen"][0]
+        dg_pos = data["parteien"]["dg"]["positionen"][0]
+        # Personen split: OG=2, DG=1, total=3 -> 300 * 2/3 = 200, 300 * 1/3 = 100.
+        assert og_pos["abschlag_gezahlt_eur_jahr"] == pytest.approx(200.0)
+        assert dg_pos["abschlag_gezahlt_eur_jahr"] == pytest.approx(100.0)
+        # IST + saldo unavailable without consumption data.
+        assert og_pos["abschlag_ist_eur_jahr"] is None
+        assert og_pos["abschlag_saldo_eur_jahr"] is None
+        assert dg_pos["abschlag_ist_eur_jahr"] is None
+        # anteil_eur_jahr mirrors gezahlt so jahr_budget makes sense.
+        assert og_pos["anteil_eur_jahr"] == pytest.approx(200.0)
+        assert og_pos["error"] is None
+
+    async def test_abschlag_with_verbrauch_populates_ist_and_saldo(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Consumption via Statistics produces IST cost and a saldo."""
+        og = _partei_subentry(subentry_id="og", flaeche_qm=85.0, personen=2)
+        dg = _partei_subentry(
+            subentry_id="dg",
+            name="DG",
+            flaeche_qm=65.0,
+            personen=1,
+        )
+        kp = _kp_subentry(
+            subentry_id="kp-wasser",
+            bezeichnung="Wasser",
+            kategorie="wasser",
+            zuordnung="haus",
+            betragsmodus="abschlag",
+            betrag_eur=None,
+            periodizitaet=None,
+            faelligkeit=None,
+            verbrauchs_entity="sensor.wasser",
+            einheitspreis_eur=3.0,
+            einheit="m3",
+            grundgebuehr_eur_monat=5.0,
+            monatlicher_abschlag_eur=50.0,
+            abrechnungszeitraum_start=date(2026, 1, 1),
+            abrechnungszeitraum_dauer_monate=12,
+            verteilung="personen",
+        )
+        entry = _make_entry(og, dg, kp)
+        coord = await _make_coordinator(hass, entry)
+
+        # Stats report 30 m3 consumed since 1-Jan.
+        fixed_now = datetime(2026, 7, 1, 12, 0, tzinfo=UTC)
+        # IST = 3 EUR/m3 * 30 m3 + 5 EUR/m * 6 m = 90 + 30 = 120
+        # gezahlt = 50 * 6 = 300 -> saldo = 120 - 300 = -180 (Guthaben).
+        with (
+            patch(
+                "custom_components.hauskosten.coordinator.dt_util.now",
+                return_value=fixed_now,
+            ),
+            patch.object(
+                HauskostenCoordinator,
+                "_fetch_abschlag_verbrauch",
+                new=AsyncMock(return_value={"kp-wasser": 30.0}),
+            ),
+        ):
+            data = await coord._async_update_data()
+
+        og_pos = data["parteien"]["og"]["positionen"][0]
+        dg_pos = data["parteien"]["dg"]["positionen"][0]
+        # Personen split: OG=2/3, DG=1/3.
+        assert og_pos["abschlag_gezahlt_eur_jahr"] == pytest.approx(200.0)
+        assert og_pos["abschlag_ist_eur_jahr"] == pytest.approx(80.0)
+        assert og_pos["abschlag_saldo_eur_jahr"] == pytest.approx(-120.0)
+        assert dg_pos["abschlag_gezahlt_eur_jahr"] == pytest.approx(100.0)
+        assert dg_pos["abschlag_ist_eur_jahr"] == pytest.approx(40.0)
+        assert dg_pos["abschlag_saldo_eur_jahr"] == pytest.approx(-60.0)
+
+    async def test_abschlag_without_monatlicher_abschlag_errors(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Missing monthly prepayment marks the position as errored."""
+        og = _partei_subentry(subentry_id="og", personen=2)
+        kp = _kp_subentry(
+            subentry_id="kp-wasser",
+            bezeichnung="Wasser",
+            kategorie="wasser",
+            zuordnung="haus",
+            betragsmodus="abschlag",
+            betrag_eur=None,
+            periodizitaet=None,
+            faelligkeit=None,
+            monatlicher_abschlag_eur=None,  # missing!
+            abrechnungszeitraum_start=date(2026, 1, 1),
+            abrechnungszeitraum_dauer_monate=12,
+            verteilung="gleich",
+        )
+        entry = _make_entry(og, kp)
+        coord = await _make_coordinator(hass, entry)
+        with patch.object(
+            HauskostenCoordinator,
+            "_fetch_abschlag_verbrauch",
+            new=AsyncMock(return_value={"kp-wasser": None}),
+        ):
+            data = await coord._async_update_data()
+        pos = data["parteien"]["og"]["positionen"][0]
+        assert pos["error"] is not None
+        assert "monatlicher_abschlag_eur" in pos["error"]
+        assert pos["abschlag_gezahlt_eur_jahr"] is None
+
+    async def test_abschlag_without_zeitraum_start_errors(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Missing reconciliation anchor marks the position as errored."""
+        og = _partei_subentry(subentry_id="og", personen=2)
+        kp = _kp_subentry(
+            subentry_id="kp-wasser",
+            bezeichnung="Wasser",
+            kategorie="wasser",
+            zuordnung="haus",
+            betragsmodus="abschlag",
+            betrag_eur=None,
+            periodizitaet=None,
+            faelligkeit=None,
+            monatlicher_abschlag_eur=50.0,
+            abrechnungszeitraum_start=None,  # missing!
+            abrechnungszeitraum_dauer_monate=12,
+            verteilung="gleich",
+        )
+        entry = _make_entry(og, kp)
+        coord = await _make_coordinator(hass, entry)
+        with patch.object(
+            HauskostenCoordinator,
+            "_fetch_abschlag_verbrauch",
+            new=AsyncMock(return_value={"kp-wasser": None}),
+        ):
+            data = await coord._async_update_data()
+        pos = data["parteien"]["og"]["positionen"][0]
+        assert pos["error"] is not None
+        assert "abrechnungszeitraum_start" in pos["error"]
+
+    async def test_abschlag_before_period_start_gezahlt_zero(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Stichtag before zeitraum_start yields zero prepayments."""
+        og = _partei_subentry(subentry_id="og", personen=2)
+        kp = _kp_subentry(
+            subentry_id="kp-wasser",
+            bezeichnung="Wasser",
+            kategorie="wasser",
+            zuordnung="haus",
+            betragsmodus="abschlag",
+            betrag_eur=None,
+            periodizitaet=None,
+            faelligkeit=None,
+            monatlicher_abschlag_eur=50.0,
+            abrechnungszeitraum_start=date(2027, 1, 1),
+            abrechnungszeitraum_dauer_monate=12,
+            verteilung="gleich",
+        )
+        entry = _make_entry(og, kp)
+        coord = await _make_coordinator(hass, entry)
+        fixed_now = datetime(2026, 6, 1, 12, 0, tzinfo=UTC)
+        with (
+            patch(
+                "custom_components.hauskosten.coordinator.dt_util.now",
+                return_value=fixed_now,
+            ),
+            patch.object(
+                HauskostenCoordinator,
+                "_fetch_abschlag_verbrauch",
+                new=AsyncMock(return_value={"kp-wasser": None}),
+            ),
+        ):
+            data = await coord._async_update_data()
+        pos = data["parteien"]["og"]["positionen"][0]
+        assert pos["error"] is None
+        assert pos["abschlag_gezahlt_eur_jahr"] == pytest.approx(0.0)
+        assert pos["anteil_eur_jahr"] == pytest.approx(0.0)
+
+    async def test_fetch_abschlag_verbrauch_no_abschlag_positions_empty(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Without ABSCHLAG positions the helper returns an empty map."""
+        og = _partei_subentry(subentry_id="og", personen=2)
+        kp = _kp_subentry(
+            subentry_id="kp-vers",
+            bezeichnung="Versicherung",
+            betragsmodus="pauschal",
+        )
+        entry = _make_entry(og, kp)
+        coord = await _make_coordinator(hass, entry)
+        result = await coord._fetch_abschlag_verbrauch(
+            coord._collect_kostenpositionen(),
+            datetime(2026, 7, 1, tzinfo=UTC),
+        )
+        assert result == {}
+
+    async def test_fetch_abschlag_verbrauch_without_entity_is_none(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """ABSCHLAG without verbrauchs_entity short-circuits to None."""
+        og = _partei_subentry(subentry_id="og", personen=2)
+        kp = _kp_subentry(
+            subentry_id="kp-wasser",
+            bezeichnung="Wasser",
+            kategorie="wasser",
+            zuordnung="haus",
+            betragsmodus="abschlag",
+            betrag_eur=None,
+            periodizitaet=None,
+            faelligkeit=None,
+            monatlicher_abschlag_eur=50.0,
+            abrechnungszeitraum_start=date(2026, 1, 1),
+            abrechnungszeitraum_dauer_monate=12,
+            # No verbrauchs_entity set.
+            verteilung="gleich",
+        )
+        entry = _make_entry(og, kp)
+        coord = await _make_coordinator(hass, entry)
+        result = await coord._fetch_abschlag_verbrauch(
+            coord._collect_kostenpositionen(),
+            datetime(2026, 7, 1, tzinfo=UTC),
+        )
+        assert result == {"kp-wasser": None}

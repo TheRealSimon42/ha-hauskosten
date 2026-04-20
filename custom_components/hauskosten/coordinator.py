@@ -22,7 +22,7 @@ those pure-logic modules; this module only orchestrates.
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
 from homeassistant.core import callback
@@ -35,14 +35,19 @@ from homeassistant.util import dt as dt_util
 
 from . import distribution
 from .calculations import (
+    abschlaege_gezahlt,
+    abschlag_ist_kosten,
+    abschlag_saldo,
     active_in_period,
     annualize,
     effektive_tage,
     monthly_share,
     next_due_date,
     resolve_verbrauchs_betrag,
+    vergangene_monate,
 )
 from .const import (
+    DEFAULT_ABRECHNUNGSZEITRAUM_DAUER_MONATE,
     DEFAULT_UPDATE_INTERVAL_MINUTES,
     SUBENTRY_KOSTENPOSITION,
     SUBENTRY_PARTEI,
@@ -189,9 +194,12 @@ class HauskostenCoordinator(DataUpdateCoordinator[CoordinatorData]):
         3. For each consumption kostenposition, resolve entity state
            into a usage value; missing / unusable states are flagged as
            per-position errors (not as a whole-update failure).
-        4. Delegate to :mod:`.distribution` / :mod:`.calculations` to turn
+        4. For each ABSCHLAG kostenposition, query the recorder Statistics
+           API for consumption over the reconciliation period (async; fed
+           into the sync compute step as a pre-fetched map).
+        5. Delegate to :mod:`.distribution` / :mod:`.calculations` to turn
            each position into a per-party share.
-        5. Aggregate shares into the hierarchical output.
+        6. Aggregate shares into the hierarchical output.
 
         Returns:
             A :class:`CoordinatorData` dict ready for the sensor platform.
@@ -202,7 +210,17 @@ class HauskostenCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 :class:`PositionAttribution.error` and do not fail the update.
         """
         try:
-            return self._compute()
+            now = dt_util.now()
+            kostenpositionen = self._collect_kostenpositionen()
+            abschlag_verbrauch = await self._fetch_abschlag_verbrauch(
+                kostenpositionen,
+                now,
+            )
+            return self._compute(
+                now=now,
+                kostenpositionen=kostenpositionen,
+                abschlag_verbrauch=abschlag_verbrauch,
+            )
         except UpdateFailed:  # pragma: no cover - defensive passthrough
             raise
         except Exception as err:
@@ -210,17 +228,127 @@ class HauskostenCoordinator(DataUpdateCoordinator[CoordinatorData]):
             raise UpdateFailed(f"hauskosten compute failed: {err}") from err
 
     # ------------------------------------------------------------------
+    # Statistics helpers
+    # ------------------------------------------------------------------
+
+    async def _fetch_abschlag_verbrauch(
+        self,
+        kostenpositionen: list[Kostenposition],
+        now: datetime,
+    ) -> dict[str, float | None]:
+        """Return ``{kp_id: verbrauch_over_period or None}`` for ABSCHLAG kps.
+
+        Non-ABSCHLAG positions are absent from the returned dict. Positions
+        without a consumption entity or reconciliation anchor map to
+        ``None``. Any recorder / statistics error is logged and also
+        surfaces as ``None`` so the downstream aggregation can report the
+        IST value as unavailable instead of crashing.
+        """
+        result: dict[str, float | None] = {}
+        abschlag_positions = [
+            kp for kp in kostenpositionen if kp["betragsmodus"] is Betragsmodus.ABSCHLAG
+        ]
+        if not abschlag_positions:
+            return result
+        # Import lazily: the recorder module pulls in a decent amount of
+        # state; we only need it when at least one ABSCHLAG position is
+        # configured.
+        try:
+            from homeassistant.components.recorder import (  # noqa: PLC0415
+                get_instance,
+            )
+            from homeassistant.components.recorder.statistics import (  # noqa: PLC0415
+                statistic_during_period,
+            )
+        except ImportError:  # pragma: no cover - recorder is a core dep
+            _LOGGER.warning("recorder unavailable; abschlag IST disabled")
+            return {kp["id"]: None for kp in abschlag_positions}
+
+        try:
+            recorder = get_instance(self.hass)
+        except Exception:
+            _LOGGER.warning("recorder instance unavailable; abschlag IST disabled")
+            return {kp["id"]: None for kp in abschlag_positions}
+
+        for kp in abschlag_positions:
+            entity_id = kp.get("verbrauchs_entity")
+            zeitraum_start = kp.get("abrechnungszeitraum_start")
+            if not entity_id or zeitraum_start is None:
+                result[kp["id"]] = None
+                continue
+            start_dt = dt_util.as_utc(
+                dt_util.start_of_local_day(datetime.combine(zeitraum_start, time.min))
+            )
+            end_dt = dt_util.as_utc(now)
+            try:
+                stats = await recorder.async_add_executor_job(
+                    statistic_during_period,
+                    self.hass,
+                    start_dt,
+                    end_dt,
+                    entity_id,
+                    {"change"},
+                    None,
+                )
+            except Exception:
+                _LOGGER.exception(
+                    "statistics fetch failed for abschlag kp=%s entity=%s",
+                    kp["id"],
+                    entity_id,
+                )
+                result[kp["id"]] = None
+                continue
+            change = stats.get("change") if isinstance(stats, dict) else None
+            if change is None:
+                _LOGGER.debug(
+                    "no statistics change returned for abschlag kp=%s entity=%s",
+                    kp["id"],
+                    entity_id,
+                )
+                result[kp["id"]] = None
+                continue
+            try:
+                result[kp["id"]] = float(change)
+            except (TypeError, ValueError):
+                _LOGGER.warning(
+                    "statistics change %r not numeric for kp=%s",
+                    change,
+                    kp["id"],
+                )
+                result[kp["id"]] = None
+        return result
+
+    # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
 
-    def _compute(self) -> CoordinatorData:
+    def _compute(
+        self,
+        *,
+        now: datetime | None = None,
+        kostenpositionen: list[Kostenposition] | None = None,
+        abschlag_verbrauch: dict[str, float | None] | None = None,
+    ) -> CoordinatorData:
         """Synchronous core of the update pipeline.
 
         Split out to keep ``_async_update_data`` focused on error handling
         and to make the function directly testable. Safe to call without a
         running event loop -- no ``await`` here, only state reads.
+
+        Args:
+            now: Injected clock; defaults to ``dt_util.now()``. Tests use
+                this to avoid clock-dependent assertions.
+            kostenpositionen: Optional pre-collected list; avoids re-reading
+                subentries when ``_async_update_data`` already has them.
+            abschlag_verbrauch: Pre-fetched ``{kp_id: verbrauch or None}``
+                map produced by :meth:`_fetch_abschlag_verbrauch`; when
+                omitted ABSCHLAG positions report the Statistics-missing
+                error and produce ``None`` IST values.
         """
-        now = dt_util.now()
+        if now is None:
+            now = dt_util.now()
+        if abschlag_verbrauch is None:
+            abschlag_verbrauch = {}
         stichtag = now.date()
         jahr = now.year
         monat = now.month
@@ -228,7 +356,8 @@ class HauskostenCoordinator(DataUpdateCoordinator[CoordinatorData]):
         period_end = date(jahr, 12, 31)
 
         parteien = self._collect_parteien()
-        kostenpositionen = self._collect_kostenpositionen()
+        if kostenpositionen is None:
+            kostenpositionen = self._collect_kostenpositionen()
 
         # Pre-compute time-weighting once per party (used across positions).
         tage_map: dict[str, int] = {
@@ -254,6 +383,7 @@ class HauskostenCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 tage_map=tage_map,
                 stichtag=stichtag,
                 partei_accum=partei_accum,
+                abschlag_verbrauch=abschlag_verbrauch,
             )
 
         for adhoc in self._store.adhoc_kosten:
@@ -339,6 +469,7 @@ class HauskostenCoordinator(DataUpdateCoordinator[CoordinatorData]):
         tage_map: dict[str, int],
         stichtag: date,
         partei_accum: dict[str, _ParteiAccumulator],
+        abschlag_verbrauch: dict[str, float | None],
     ) -> None:
         """Resolve a single kostenposition to per-party attributions."""
         # Resolve the annual amount first; verbrauch-based positions may
@@ -347,15 +478,22 @@ class HauskostenCoordinator(DataUpdateCoordinator[CoordinatorData]):
         amount_error: str | None = None
         annual_amount: float = 0.0
         betragsmodus = kp["betragsmodus"]
+        abschlag_totals: _AbschlagTotals | None = None
         if betragsmodus is Betragsmodus.PAUSCHAL:
             annual_amount = _annualize_pauschal(kp)
         elif betragsmodus is Betragsmodus.VERBRAUCH:
             annual_amount, amount_error = self._resolve_verbrauchs_amount(kp)
         else:
-            # ABSCHLAG is handled by phase-3 logic; until that lands the
-            # coordinator produces an explicit error attribution so the user
-            # sees "nicht verfuegbar" instead of a silent zero.
-            amount_error = "abschlag mode pending"
+            abschlag_totals, amount_error = _resolve_abschlag_totals(
+                kp,
+                stichtag=stichtag,
+                verbrauch=abschlag_verbrauch.get(kp["id"]),
+            )
+            # The gezahlt total drives the yearly aggregates; IST / saldo
+            # only flow into the dedicated abschlag_* fields per party.
+            annual_amount = (
+                abschlag_totals.gezahlt_total if abschlag_totals is not None else 0.0
+            )
 
         extra, dist_error = self._build_allocation_extra(
             kp,
@@ -365,6 +503,7 @@ class HauskostenCoordinator(DataUpdateCoordinator[CoordinatorData]):
         error = amount_error or dist_error
 
         shares: dict[str, float]
+        ist_shares: dict[str, float] | None = None
         if error is not None:
             shares = {p["id"]: 0.0 for p in parteien}
         else:
@@ -376,6 +515,17 @@ class HauskostenCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     stichtag=stichtag,
                     extra=extra,
                 )
+                if (
+                    abschlag_totals is not None
+                    and abschlag_totals.ist_total is not None
+                ):
+                    ist_shares = distribution.allocate(
+                        abschlag_totals.ist_total,
+                        parteien,
+                        key=kp["verteilung"],
+                        stichtag=stichtag,
+                        extra=extra,
+                    )
             except ValueError as err:
                 _LOGGER.warning(
                     "Distribution failed for kostenposition %s: %s",
@@ -384,10 +534,19 @@ class HauskostenCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 )
                 error = f"distribution failed: {err}"
                 shares = {p["id"]: 0.0 for p in parteien}
+                ist_shares = None
 
         faelligkeit = _resolve_next_due(kp, stichtag)
         for p in parteien:
             pid = p["id"]
+            gezahlt_eur: float | None = None
+            ist_eur: float | None = None
+            saldo_eur: float | None = None
+            if abschlag_totals is not None and error is None:
+                gezahlt_eur = shares[pid]
+                if ist_shares is not None:
+                    ist_eur = ist_shares[pid]
+                    saldo_eur = abschlag_saldo(ist_eur, gezahlt_eur)
             attribution: PositionAttribution = {
                 "kostenposition_id": kp["id"],
                 "bezeichnung": kp["bezeichnung"],
@@ -395,6 +554,9 @@ class HauskostenCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 "anteil_eur_jahr": shares[pid],
                 "verteilschluessel_verwendet": kp["verteilung"],
                 "error": error,
+                "abschlag_gezahlt_eur_jahr": gezahlt_eur,
+                "abschlag_ist_eur_jahr": ist_eur,
+                "abschlag_saldo_eur_jahr": saldo_eur,
             }
             partei_accum[pid].add_position(attribution, faelligkeit)
 
@@ -444,6 +606,9 @@ class HauskostenCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 "anteil_eur_jahr": shares[pid],
                 "verteilschluessel_verwendet": verteilung,
                 "error": error,
+                "abschlag_gezahlt_eur_jahr": None,
+                "abschlag_ist_eur_jahr": None,
+                "abschlag_saldo_eur_jahr": None,
             }
             partei_accum[pid].add_position(attribution, faelligkeit=None)
 
@@ -710,6 +875,76 @@ def _resolve_next_due(kp: Kostenposition, reference: date) -> date | None:
     if faelligkeit is None or periodizitaet is None:
         return None
     return next_due_date(faelligkeit, periodizitaet, reference)
+
+
+class _AbschlagTotals:
+    """Container for the three Abschlag whole-house totals.
+
+    ``gezahlt_total`` is always populated when the position is valid (zero
+    until one month has elapsed). ``ist_total`` is ``None`` when no
+    consumption sensor is configured or the Statistics API has no data.
+    """
+
+    __slots__ = ("gezahlt_total", "ist_total")
+
+    def __init__(self, gezahlt_total: float, ist_total: float | None) -> None:
+        """Store the pre-allocation totals."""
+        self.gezahlt_total = gezahlt_total
+        self.ist_total = ist_total
+
+
+def _resolve_abschlag_totals(
+    kp: Kostenposition,
+    *,
+    stichtag: date,
+    verbrauch: float | None,
+) -> tuple[_AbschlagTotals | None, str | None]:
+    """Compute the house-wide gezahlt + IST totals for an ABSCHLAG position.
+
+    Returns ``(totals, error)``. ``totals`` is ``None`` when the config is
+    incomplete (monthly rate or reconciliation anchor missing) -- the
+    caller surfaces the error into the per-position attribution.
+    """
+    monatlich = kp.get("monatlicher_abschlag_eur")
+    zeitraum_start = kp.get("abrechnungszeitraum_start")
+    if monatlich is None:
+        return None, "monatlicher_abschlag_eur missing"
+    if zeitraum_start is None:
+        return None, "abrechnungszeitraum_start missing"
+    dauer = (
+        kp.get("abrechnungszeitraum_dauer_monate")
+        or DEFAULT_ABRECHNUNGSZEITRAUM_DAUER_MONATE
+    )
+    try:
+        gezahlt_total = abschlaege_gezahlt(
+            float(monatlich),
+            zeitraum_start,
+            int(dauer),
+            stichtag,
+        )
+    except ValueError as err:
+        return None, f"abschlag gezahlt failed: {err}"
+
+    ist_total: float | None = None
+    einheitspreis = kp.get("einheitspreis_eur")
+    if verbrauch is not None and einheitspreis is not None:
+        monate = vergangene_monate(zeitraum_start, stichtag, int(dauer))
+        try:
+            ist_total = abschlag_ist_kosten(
+                float(einheitspreis),
+                float(verbrauch),
+                kp.get("grundgebuehr_eur_monat"),
+                monate,
+            )
+        except ValueError as err:
+            _LOGGER.warning(
+                "abschlag IST calc failed for %s: %s",
+                kp["id"],
+                err,
+            )
+            ist_total = None
+
+    return _AbschlagTotals(gezahlt_total=gezahlt_total, ist_total=ist_total), None
 
 
 # ---------------------------------------------------------------------------

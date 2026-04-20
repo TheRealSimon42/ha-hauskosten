@@ -298,11 +298,25 @@ class PositionAttribution(TypedDict):
             consumption by the sensor platform).
         kategorie: Category of the Kostenposition (denormalised).
         anteil_eur_jahr: This party's yearly share in Euro (rounded to 2
-            decimals by the coordinator).
+            decimals by the coordinator). For ``ABSCHLAG`` positions this
+            mirrors ``abschlag_gezahlt_eur_jahr`` so the regular
+            jahr-aktuell / jahr-budget aggregates reflect actually prepaid
+            amounts.
         verteilschluessel_verwendet: Which distribution key actually
             produced this share (useful when fallbacks kick in).
         error: Non-``None`` message when the allocation failed for this
             party -- the sensor shows the error rather than a misleading 0 EUR.
+        abschlag_gezahlt_eur_jahr: For ``Betragsmodus.ABSCHLAG`` only: the
+            cumulative prepayment attributed to this party in the current
+            reconciliation period. ``None`` for other modes.
+        abschlag_ist_eur_jahr: For ``Betragsmodus.ABSCHLAG`` only: the
+            consumption-derived IST cost attributed to this party in the
+            current period. ``None`` when no consumption sensor is
+            referenced or the Statistics API returned no data.
+        abschlag_saldo_eur_jahr: For ``Betragsmodus.ABSCHLAG`` only:
+            ``ist - gezahlt`` (positive = expected under-payment, negative
+            = expected credit). ``None`` when ``abschlag_ist_eur_jahr`` is
+            ``None``.
     """
 
     kostenposition_id: str
@@ -311,6 +325,9 @@ class PositionAttribution(TypedDict):
     anteil_eur_jahr: float
     verteilschluessel_verwendet: Verteilung
     error: str | None
+    abschlag_gezahlt_eur_jahr: float | None
+    abschlag_ist_eur_jahr: float | None
+    abschlag_saldo_eur_jahr: float | None
 
 
 class ParteiResult(TypedDict):

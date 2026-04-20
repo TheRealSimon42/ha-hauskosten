@@ -266,6 +266,9 @@ class TestCoordinatorResultShapes:
             "anteil_eur_jahr",
             "verteilschluessel_verwendet",
             "error",
+            "abschlag_gezahlt_eur_jahr",
+            "abschlag_ist_eur_jahr",
+            "abschlag_saldo_eur_jahr",
         }
 
     def test_partei_result_keys(self) -> None:
