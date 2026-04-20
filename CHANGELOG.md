@@ -9,78 +9,28 @@ Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Added
 
-- Sensor-Platform `sensor.py` final: `async_setup_entry` baut aus
-  `coordinator.data` dynamisch alle Entities. Pro Partei: `monat_aktuell`,
-  `jahr_aktuell`, `jahr_budget`, `naechste_faelligkeit` (DATE) plus ein
-  `kategorie_<kategorie>_jahr`-Sensor pro Kategorie mit Beitrag > 0. Fürs
-  ganze Haus: `jahr_gesamt`, `jahr_budget`, `naechste_faelligkeit` (früheste
-  Fälligkeit aller Parteien) und ein `kategorie_<kategorie>_jahr`-Sensor
-  pro Haus-weiter Kategorie. Alle Entity-Klassen erben
-  `HauskostenSensorBase` (`CoordinatorEntity` + `SensorEntity`) mit
-  gemeinsamer `DeviceInfo` (ein Device pro ConfigEntry) und gesetztem
-  `_attr_has_entity_name = True`. Unique-IDs rein auf IDs:
-  `{entry_id}_partei_{subentry_id}_{zweck}` bzw.
-  `{entry_id}_haus_{zweck}` — keine Abhängigkeit vom Partei-Namen.
-  EUR-Sensoren mit `device_class=MONETARY`, `state_class=TOTAL`,
-  `native_unit_of_measurement="EUR"`, `suggested_display_precision=2`;
-  Fälligkeits-Sensoren mit `device_class=DATE`. Translation-Keys aus
-  `entity.sensor.*` in `strings.json` (`partei_monat_aktuell`,
-  `partei_jahr_aktuell`, `partei_jahr_budget`,
-  `partei_naechste_faelligkeit`, `partei_kategorie_jahr`, `haus_jahr_gesamt`,
-  `haus_jahr_budget`, `haus_kategorie_jahr`, `naechste_faelligkeit`) mit
-  `_attr_translation_placeholders` für `partei` / `jahr` / `kategorie`.
-  Dynamisches Entity-Management via `coordinator.async_add_listener` —
-  neue Parteien / Kategorien erzeugen neue Sensoren ohne Reload; ein
-  `known_ids`-Set verhindert Doppelregistrierung. Properties lesen
-  ausschließlich aus `coordinator.data`, `available` wird gated auf
-  Parteianwesenheit, sodass gelöschte Parteien `unavailable` werden.
-- `tests/test_sensor.py` (22 Tests): Empty-Setup (nur Haus-Sensoren),
-  Ein-Partei-Ein-Position-Szenario (alle Sensoren + korrekte native_values),
-  Zwei Parteien × zwei Kategorien (Kategorie-Sensoren je Partei und Haus),
-  Coordinator-Refresh propagiert Werte an Sensoren, dynamische
-  Subentry-Ergänzung (neue Partei → neue Sensoren ohne Reload),
-  Device-Grouping unter `(DOMAIN, entry_id)`, `has_entity_name=True` +
-  `translation_key`, unique_id-Stabilität gegen Partei-Namen,
-  Verschwinden der Partei → `unavailable`, Fälligkeits-Sensoren liefern
-  ISO-Daten / `unknown`, keine Kategorie-Sensoren für Null-Werte,
-  Attribute listen `positionen` / `kategorie`. Coverage `sensor.py`
-  99.07 %, Gesamt 97.85 % (310 Tests insgesamt).
+- —
 
-- Integration-Lifecycle in `__init__.py` final: `async_setup_entry`
-  orchestriert Store-Load (Fehler -> `ConfigEntryNotReady`), Coordinator-
-  Konstruktion + `async_config_entry_first_refresh`, State-Listener,
-  `hass.data[DOMAIN][entry_id]` mit `store` + `coordinator`,
-  `add_update_listener` (via `async_on_unload`) fuer Subentry-Refresh
-  und Platform-Forward an `sensor`. `async_unload_entry` demontiert
-  Listener, unloadet Platforms, raeumt `hass.data` auf und entfernt
-  Services beim letzten Entry. `async_entry_update_listener` rewiredet
-  State-Listener und ruft `async_request_refresh`. `async_migrate_entry`
-  akzeptiert die aktuelle Schema-Version v1 und weist hoehere Versionen
-  (Downgrade) ab.
-- Service-Actions `hauskosten.add_einmalig` und `hauskosten.mark_paid`
-  in `services.py` + `services.yaml`; optional `entry_id` (Auto-Pick
-  bei genau einem Entry, sonst Pflicht). `add_einmalig` generiert
-  UUIDs, schreibt via `HauskostenStore.async_add_adhoc` und loest
-  `coordinator.async_request_refresh` aus; `mark_paid` schreibt via
-  `async_mark_paid`. `ServiceValidationError` bei unbekanntem
-  `entry_id`, fehlender Disambiguierung oder Duplikat-IDs.
-- Sensor-Platform-Stub (`sensor.py`) ohne Entities; Phase 1.8 ersetzt
-  ihn, erlaubt Phase 1.7 aber bereits Platform-Forward und End-to-End-
-  Setup.
-- Service-Felder in `strings.json` + `translations/de.json` +
-  `translations/en.json` (Name + Description pro Feld fuer
-  `add_einmalig` und `mark_paid`).
-- `tests/test_init.py` (20 Tests): Setup-Happy-Path inkl. Store- und
-  Coordinator-Wiring, State-Listener-Refresh bei Verbrauchs-Entity-
-  Aenderung, Store-Load-Failure -> `ConfigEntryNotReady`, Unload mit
-  Listener- und hass.data-Cleanup, Update-Listener triggert
-  Coordinator-Refresh, Migration-Contract (aktuelle Version / Downgrade),
-  Services-Registrierung + Ausloesung + Entry-Resolution inkl.
-  Multi-Entry-Disambiguierung. Coverage auf `__init__.py` 96.88 %,
-  `services.py` 92.00 %, Gesamt 97.60 %.
-- Projekt-Setup: `AGENTS.md`, Architektur-Dokumente, Sub-Agent-Definitionen
-- Coding-Standards und Pre-Commit-Hooks
-- Manifest-, HACS- und EditorConfig-Grundgerüst
+### Changed
+
+- —
+
+### Fixed
+
+- —
+
+## [0.1.0-beta.1] - 2026-04-19
+
+Erster öffentlicher Pre-Release. Phase 1 (1.1–1.8) ist komplett: pure
+Verteilungs- und Zeitlogik, Datenmodell, Storage, Coordinator, vollständiger
+Config Flow mit Subentries, Integrations-Lifecycle inkl. Services und die
+dynamische Sensor-Platform. 310 Tests, Gesamt-Coverage 97.84 %.
+
+### Added
+
+- Projekt-Setup: `AGENTS.md`, Architektur-Dokumente, Sub-Agent-Definitionen.
+- Coding-Standards und Pre-Commit-Hooks.
+- Manifest-, HACS- und EditorConfig-Grundgerüst.
 - Pure-Logik-Modul `distribution.py` mit allen Verteilungsalgorithmen
   (`direkt`, `gleich`, `flaeche`, `personen`, `verbrauch` Subzähler) inkl.
   Zeitgewichtung bei Mieterwechsel und Rundungskorrektur. Vollständige
@@ -141,29 +91,91 @@ Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
     Selector-Übersetzungen für `kategorie`, `zuordnung`,
     `betragsmodus`, `periodizitaet`, `einheit`, `verteilung`.
   * 94 % Line + Branch Coverage auf config_flow.py via
-    `tests/test_config_flow.py` (45 Tests, 268 Tests gesamt,
-    Gesamt-Coverage 97.76 %).
-- `tests/conftest.py`: Strippt nicht existente Einträge aus
-  `custom_components.__path__`, damit HAs `_get_custom_components`
-  nicht am `__editable__`-Placeholder von pip-editable-Installs
-  scheitert.
+    `tests/test_config_flow.py` (45 Tests).
+- Integration-Lifecycle in `__init__.py` final: `async_setup_entry`
+  orchestriert Store-Load (Fehler → `ConfigEntryNotReady`), Coordinator-
+  Konstruktion + `async_config_entry_first_refresh`, State-Listener,
+  `hass.data[DOMAIN][entry_id]` mit `store` + `coordinator`,
+  `add_update_listener` (via `async_on_unload`) für Subentry-Refresh
+  und Platform-Forward an `sensor`. `async_unload_entry` demontiert
+  Listener, unloadet Platforms, räumt `hass.data` auf und entfernt
+  Services beim letzten Entry. `async_entry_update_listener` rewired
+  State-Listener und ruft `async_request_refresh`. `async_migrate_entry`
+  akzeptiert die aktuelle Schema-Version v1 und weist höhere Versionen
+  (Downgrade) ab.
+- Service-Actions `hauskosten.add_einmalig` und `hauskosten.mark_paid`
+  in `services.py` + `services.yaml`; optional `entry_id` (Auto-Pick
+  bei genau einem Entry, sonst Pflicht). `add_einmalig` generiert
+  UUIDs, schreibt via `HauskostenStore.async_add_adhoc` und löst
+  `coordinator.async_request_refresh` aus; `mark_paid` schreibt via
+  `async_mark_paid`. `ServiceValidationError` bei unbekanntem
+  `entry_id`, fehlender Disambiguierung oder Duplikat-IDs.
+- Service-Felder in `strings.json` + `translations/de.json` +
+  `translations/en.json` (Name + Description pro Feld für
+  `add_einmalig` und `mark_paid`).
+- `tests/test_init.py` (20 Tests): Setup-Happy-Path inkl. Store- und
+  Coordinator-Wiring, State-Listener-Refresh bei Verbrauchs-Entity-
+  Änderung, Store-Load-Failure → `ConfigEntryNotReady`, Unload mit
+  Listener- und hass.data-Cleanup, Update-Listener triggert
+  Coordinator-Refresh, Migration-Contract (aktuelle Version / Downgrade),
+  Services-Registrierung + Auslösung + Entry-Resolution inkl.
+  Multi-Entry-Disambiguierung.
+- Sensor-Platform `sensor.py` final: `async_setup_entry` baut aus
+  `coordinator.data` dynamisch alle Entities. Pro Partei: `monat_aktuell`,
+  `jahr_aktuell`, `jahr_budget`, `naechste_faelligkeit` (DATE) plus ein
+  `kategorie_<kategorie>_jahr`-Sensor pro Kategorie mit Beitrag > 0. Fürs
+  ganze Haus: `jahr_gesamt`, `jahr_budget`, `naechste_faelligkeit` (früheste
+  Fälligkeit aller Parteien) und ein `kategorie_<kategorie>_jahr`-Sensor
+  pro Haus-weiter Kategorie. Alle Entity-Klassen erben
+  `HauskostenSensorBase` (`CoordinatorEntity` + `SensorEntity`) mit
+  gemeinsamer `DeviceInfo` (ein Device pro ConfigEntry) und gesetztem
+  `_attr_has_entity_name = True`. Unique-IDs rein auf IDs:
+  `{entry_id}_partei_{subentry_id}_{zweck}` bzw.
+  `{entry_id}_haus_{zweck}` — keine Abhängigkeit vom Partei-Namen.
+  EUR-Sensoren mit `device_class=MONETARY`, `state_class=TOTAL`,
+  `native_unit_of_measurement="EUR"`, `suggested_display_precision=2`;
+  Fälligkeits-Sensoren mit `device_class=DATE`. Translation-Keys aus
+  `entity.sensor.*` in `strings.json` (`partei_monat_aktuell`,
+  `partei_jahr_aktuell`, `partei_jahr_budget`,
+  `partei_naechste_faelligkeit`, `partei_kategorie_jahr`, `haus_jahr_gesamt`,
+  `haus_jahr_budget`, `haus_kategorie_jahr`, `naechste_faelligkeit`) mit
+  `_attr_translation_placeholders` für `partei` / `jahr` / `kategorie`.
+  Dynamisches Entity-Management via `coordinator.async_add_listener` —
+  neue Parteien / Kategorien erzeugen neue Sensoren ohne Reload; ein
+  `known_ids`-Set verhindert Doppelregistrierung. Properties lesen
+  ausschließlich aus `coordinator.data`, `available` wird gated auf
+  Parteianwesenheit, sodass gelöschte Parteien `unavailable` werden.
+- `tests/test_sensor.py` (22 Tests): Empty-Setup (nur Haus-Sensoren),
+  Ein-Partei-Ein-Position-Szenario (alle Sensoren + korrekte native_values),
+  Zwei Parteien × zwei Kategorien (Kategorie-Sensoren je Partei und Haus),
+  Coordinator-Refresh propagiert Werte an Sensoren, dynamische
+  Subentry-Ergänzung (neue Partei → neue Sensoren ohne Reload),
+  Device-Grouping unter `(DOMAIN, entry_id)`, `has_entity_name=True` +
+  `translation_key`, unique_id-Stabilität gegen Partei-Namen,
+  Verschwinden der Partei → `unavailable`, Fälligkeits-Sensoren liefern
+  ISO-Daten / `unknown`, keine Kategorie-Sensoren für Null-Werte,
+  Attribute listen `positionen` / `kategorie`.
 
 ### Changed
 
 - `manifest.json`: `integration_type` auf `"hub"` gesetzt, da wir
-  Subentries fuer Parteien und Kostenpositionen verwenden -- entspricht
-  dem Hassfest-Standard fuer Multi-Device-/Multi-Record-Integrationen.
+  Subentries für Parteien und Kostenpositionen verwenden — entspricht
+  dem Hassfest-Standard für Multi-Device-/Multi-Record-Integrationen.
 - `tests/conftest.py`: Plugin `pytest_homeassistant_custom_component` wird
-  nur geladen wenn installiert, damit Pure-Logik-Tests auch in schlanken
-  Umgebungen laufen.
+  nur geladen, wenn installiert, damit Pure-Logik-Tests auch in schlanken
+  Umgebungen laufen. Zusätzlich: Nicht existente Einträge aus
+  `custom_components.__path__` strippen, damit HAs
+  `_get_custom_components` nicht am `__editable__`-Placeholder von
+  pip-editable-Installs scheitert.
 - `pyproject.toml`: Ruff-Regel `TRY003` ignoriert (lange Fehlermeldungen
   inline sind bewusst erlaubt für bessere Diagnose).
 - `pyproject.toml`: Coverage-Gate `fail_under` von `0` auf `80` angehoben,
   nachdem distribution / calculations / models vollständig getestet sind
-  (Gesamt-Coverage aktuell 95 %).
+  (aktuelle Gesamt-Coverage 97.84 %).
 
 ### Fixed
 
 - —
 
-[Unreleased]: https://github.com/TheRealSimon42/ha-hauskosten/compare/HEAD...HEAD
+[Unreleased]: https://github.com/TheRealSimon42/ha-hauskosten/compare/v0.1.0-beta.1...HEAD
+[0.1.0-beta.1]: https://github.com/TheRealSimon42/ha-hauskosten/releases/tag/v0.1.0-beta.1
