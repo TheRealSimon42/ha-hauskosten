@@ -81,7 +81,8 @@ class TestBetragsmodus:
     def test_values(self) -> None:
         assert Betragsmodus.PAUSCHAL.value == "pauschal"
         assert Betragsmodus.VERBRAUCH.value == "verbrauch"
-        assert len(Betragsmodus) == 2
+        assert Betragsmodus.ABSCHLAG.value == "abschlag"
+        assert len(Betragsmodus) == 3
 
 
 class TestPeriodizitaet:
@@ -173,6 +174,9 @@ class TestKostenposition:
             "einheitspreis_eur",
             "einheit",
             "grundgebuehr_eur_monat",
+            "monatlicher_abschlag_eur",
+            "abrechnungszeitraum_start",
+            "abrechnungszeitraum_dauer_monate",
             "verteilung",
             "verbrauch_entities_pro_partei",
             "aktiv_ab",
@@ -195,6 +199,9 @@ class TestKostenposition:
             "einheitspreis_eur": None,
             "einheit": None,
             "grundgebuehr_eur_monat": None,
+            "monatlicher_abschlag_eur": None,
+            "abrechnungszeitraum_start": None,
+            "abrechnungszeitraum_dauer_monate": None,
             "verteilung": Verteilung.FLAECHE,
             "verbrauch_entities_pro_partei": None,
             "aktiv_ab": None,
@@ -202,6 +209,34 @@ class TestKostenposition:
             "notiz": None,
         }
         assert kp["kategorie"] is Kategorie.VERSICHERUNG
+
+    def test_construct_abschlag(self) -> None:
+        kp: Kostenposition = {
+            "id": "kp-wasser",
+            "bezeichnung": "Wasser / Abwasser",
+            "kategorie": Kategorie.WASSER,
+            "zuordnung": Zuordnung.HAUS,
+            "zuordnung_partei_id": None,
+            "betragsmodus": Betragsmodus.ABSCHLAG,
+            "betrag_eur": None,
+            "periodizitaet": None,
+            "faelligkeit": None,
+            "verbrauchs_entity": "sensor.wasserzaehler",
+            "einheitspreis_eur": 3.5,
+            "einheit": None,
+            "grundgebuehr_eur_monat": 5.0,
+            "monatlicher_abschlag_eur": 50.0,
+            "abrechnungszeitraum_start": date(2026, 1, 1),
+            "abrechnungszeitraum_dauer_monate": 12,
+            "verteilung": Verteilung.PERSONEN,
+            "verbrauch_entities_pro_partei": None,
+            "aktiv_ab": None,
+            "aktiv_bis": None,
+            "notiz": None,
+        }
+        assert kp["betragsmodus"] is Betragsmodus.ABSCHLAG
+        assert kp["monatlicher_abschlag_eur"] == 50.0
+        assert kp["abrechnungszeitraum_dauer_monate"] == 12
 
 
 class TestAdHocKosten:
@@ -231,6 +266,9 @@ class TestCoordinatorResultShapes:
             "anteil_eur_jahr",
             "verteilschluessel_verwendet",
             "error",
+            "abschlag_gezahlt_eur_jahr",
+            "abschlag_ist_eur_jahr",
+            "abschlag_saldo_eur_jahr",
         }
 
     def test_partei_result_keys(self) -> None:

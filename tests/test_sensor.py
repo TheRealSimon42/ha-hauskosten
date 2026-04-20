@@ -17,9 +17,10 @@ and the update listener are wired correctly.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -37,7 +38,13 @@ from custom_components.hauskosten.const import (
 from custom_components.hauskosten.coordinator import HauskostenCoordinator
 from custom_components.hauskosten.models import Kategorie
 from custom_components.hauskosten.sensor import (
+    HausAbschlagGezahltSensor,
+    HausAbschlagIstSensor,
+    HausAbschlagSaldoSensor,
     HausKategorieSensor,
+    ParteiAbschlagGezahltSensor,
+    ParteiAbschlagIstSensor,
+    ParteiAbschlagSaldoSensor,
     ParteiJahrAktuellSensor,
     ParteiJahrBudgetSensor,
     ParteiKategorieSensor,
@@ -92,6 +99,13 @@ def _kp_subentry(
     betrag_eur: float | None = 450.0,
     periodizitaet: str | None = "jaehrlich",
     faelligkeit: date | None = date(2026, 3, 15),
+    verbrauchs_entity: str | None = None,
+    einheitspreis_eur: float | None = None,
+    einheit: str | None = None,
+    grundgebuehr_eur_monat: float | None = None,
+    monatlicher_abschlag_eur: float | None = None,
+    abrechnungszeitraum_start: date | None = None,
+    abrechnungszeitraum_dauer_monate: int | None = None,
     verteilung: str = "flaeche",
 ) -> ConfigSubentry:
     """Build a ConfigSubentry of type 'kostenposition'."""
@@ -104,10 +118,15 @@ def _kp_subentry(
         "betrag_eur": betrag_eur,
         "periodizitaet": periodizitaet,
         "faelligkeit": faelligkeit.isoformat() if faelligkeit else None,
-        "verbrauchs_entity": None,
-        "einheitspreis_eur": None,
-        "einheit": None,
-        "grundgebuehr_eur_monat": None,
+        "verbrauchs_entity": verbrauchs_entity,
+        "einheitspreis_eur": einheitspreis_eur,
+        "einheit": einheit,
+        "grundgebuehr_eur_monat": grundgebuehr_eur_monat,
+        "monatlicher_abschlag_eur": monatlicher_abschlag_eur,
+        "abrechnungszeitraum_start": (
+            abrechnungszeitraum_start.isoformat() if abrechnungszeitraum_start else None
+        ),
+        "abrechnungszeitraum_dauer_monate": abrechnungszeitraum_dauer_monate,
         "verteilung": verteilung,
         "verbrauch_entities_pro_partei": None,
         "aktiv_ab": None,
@@ -895,3 +914,329 @@ class TestVanishedPartyNativeValues:
         kat_attrs = kat.extra_state_attributes
         assert "positionen" not in kat_attrs
         assert kat_attrs["kategorie"] == "versicherung"
+
+
+# ---------------------------------------------------------------------------
+# Abschlag sensors (phase 4)
+# ---------------------------------------------------------------------------
+
+
+class TestAbschlagSensors:
+    """ABSCHLAG positions produce three drill-down sensors per party + house."""
+
+    async def test_abschlag_sensors_created_for_each_position(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Two parties + one abschlag position -> 6 partei + 3 haus sensors."""
+
+        og = _partei_subentry(subentry_id="og", personen=2)
+        dg = _partei_subentry(subentry_id="dg", name="DG", flaeche_qm=65.0, personen=1)
+        kp = _kp_subentry(
+            subentry_id="kp-wasser",
+            bezeichnung="Wasser",
+            kategorie="wasser",
+            zuordnung="haus",
+            betragsmodus="abschlag",
+            betrag_eur=None,
+            periodizitaet=None,
+            faelligkeit=None,
+            monatlicher_abschlag_eur=50.0,
+            abrechnungszeitraum_start=date(2026, 1, 1),
+            abrechnungszeitraum_dauer_monate=12,
+            verteilung="personen",
+        )
+        entry = _make_entry(og, dg, kp)
+
+        with (
+            patch(
+                "custom_components.hauskosten.coordinator.dt_util.now",
+                return_value=datetime(2026, 7, 1, 12, 0, tzinfo=UTC),
+            ),
+            patch(
+                "custom_components.hauskosten.coordinator."
+                "HauskostenCoordinator._fetch_abschlag_verbrauch",
+                new=AsyncMock(return_value={"kp-wasser": None}),
+            ),
+        ):
+            await _setup_entry(hass, entry)
+
+        unique_ids = _sensor_unique_ids(hass, entry.entry_id)
+        # Per party x position: 3 sensors each = 6 total.
+        for pid in ("og", "dg"):
+            assert (
+                f"{entry.entry_id}_partei_{pid}_abschlag_kp-wasser_gezahlt"
+                in unique_ids
+            )
+            assert f"{entry.entry_id}_partei_{pid}_abschlag_kp-wasser_ist" in unique_ids
+            assert (
+                f"{entry.entry_id}_partei_{pid}_abschlag_kp-wasser_saldo" in unique_ids
+            )
+        # Haus x position: 3 aggregate sensors.
+        assert f"{entry.entry_id}_haus_abschlag_kp-wasser_gezahlt" in unique_ids
+        assert f"{entry.entry_id}_haus_abschlag_kp-wasser_ist" in unique_ids
+        assert f"{entry.entry_id}_haus_abschlag_kp-wasser_saldo" in unique_ids
+
+    async def test_abschlag_gezahlt_native_value_distributed(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Gezahlt sensor reports the party's share (personen key, 6 months)."""
+
+        og = _partei_subentry(subentry_id="og", personen=2)
+        dg = _partei_subentry(subentry_id="dg", name="DG", flaeche_qm=65.0, personen=1)
+        kp = _kp_subentry(
+            subentry_id="kp-wasser",
+            bezeichnung="Wasser",
+            kategorie="wasser",
+            zuordnung="haus",
+            betragsmodus="abschlag",
+            betrag_eur=None,
+            periodizitaet=None,
+            faelligkeit=None,
+            monatlicher_abschlag_eur=50.0,
+            abrechnungszeitraum_start=date(2026, 1, 1),
+            abrechnungszeitraum_dauer_monate=12,
+            verteilung="personen",
+        )
+        entry = _make_entry(og, dg, kp)
+
+        with (
+            patch(
+                "custom_components.hauskosten.coordinator.dt_util.now",
+                return_value=datetime(2026, 7, 1, 12, 0, tzinfo=UTC),
+            ),
+            patch(
+                "custom_components.hauskosten.coordinator."
+                "HauskostenCoordinator._fetch_abschlag_verbrauch",
+                new=AsyncMock(return_value={"kp-wasser": None}),
+            ),
+        ):
+            await _setup_entry(hass, entry)
+
+        registry = er.async_get(hass)
+        og_gezahlt = next(
+            e
+            for e in registry.entities.values()
+            if e.unique_id == f"{entry.entry_id}_partei_og_abschlag_kp-wasser_gezahlt"
+        )
+        state = hass.states.get(og_gezahlt.entity_id)
+        assert state is not None
+        assert float(state.state) == pytest.approx(200.0)
+        # IST sensor has no statistics data -> unavailable.
+        og_ist = next(
+            e
+            for e in registry.entities.values()
+            if e.unique_id == f"{entry.entry_id}_partei_og_abschlag_kp-wasser_ist"
+        )
+        ist_state = hass.states.get(og_ist.entity_id)
+        assert ist_state is not None
+        assert ist_state.state == "unknown"
+
+    async def test_abschlag_haus_sum_across_parties(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Haus-Gezahlt aggregates the per-party shares back to 300 EUR."""
+
+        og = _partei_subentry(subentry_id="og", personen=2)
+        dg = _partei_subentry(subentry_id="dg", name="DG", flaeche_qm=65.0, personen=1)
+        kp = _kp_subentry(
+            subentry_id="kp-wasser",
+            bezeichnung="Wasser",
+            kategorie="wasser",
+            zuordnung="haus",
+            betragsmodus="abschlag",
+            betrag_eur=None,
+            periodizitaet=None,
+            faelligkeit=None,
+            monatlicher_abschlag_eur=50.0,
+            abrechnungszeitraum_start=date(2026, 1, 1),
+            abrechnungszeitraum_dauer_monate=12,
+            verteilung="personen",
+        )
+        entry = _make_entry(og, dg, kp)
+
+        with (
+            patch(
+                "custom_components.hauskosten.coordinator.dt_util.now",
+                return_value=datetime(2026, 7, 1, 12, 0, tzinfo=UTC),
+            ),
+            patch(
+                "custom_components.hauskosten.coordinator."
+                "HauskostenCoordinator._fetch_abschlag_verbrauch",
+                new=AsyncMock(return_value={"kp-wasser": 30.0}),
+            ),
+        ):
+            await _setup_entry(hass, entry)
+
+        registry = er.async_get(hass)
+        haus_gezahlt = next(
+            e
+            for e in registry.entities.values()
+            if e.unique_id == f"{entry.entry_id}_haus_abschlag_kp-wasser_gezahlt"
+        )
+        state = hass.states.get(haus_gezahlt.entity_id)
+        assert state is not None
+        assert float(state.state) == pytest.approx(300.0)
+        # IST total = 3 EUR * 30 m3 + 5 EUR? No -- no grundgebuehr in this test.
+        # With einheitspreis=None in this position, IST stays None (no stats
+        # formula). Expect unknown state.
+        haus_ist = next(
+            e
+            for e in registry.entities.values()
+            if e.unique_id == f"{entry.entry_id}_haus_abschlag_kp-wasser_ist"
+        )
+        # einheitspreis None -> coordinator skips ist_total, so this stays
+        # None. The sensor exposes "unknown".
+        assert hass.states.get(haus_ist.entity_id).state == "unknown"
+
+    async def test_abschlag_ist_populated_when_price_and_stats_available(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """With einheitspreis + statistics change, IST and Saldo are set."""
+
+        og = _partei_subentry(subentry_id="og", personen=2)
+        dg = _partei_subentry(subentry_id="dg", name="DG", flaeche_qm=65.0, personen=1)
+        kp = _kp_subentry(
+            subentry_id="kp-wasser",
+            bezeichnung="Wasser",
+            kategorie="wasser",
+            zuordnung="haus",
+            betragsmodus="abschlag",
+            betrag_eur=None,
+            periodizitaet=None,
+            faelligkeit=None,
+            verbrauchs_entity="sensor.wasser",
+            einheitspreis_eur=3.0,
+            einheit="m3",
+            grundgebuehr_eur_monat=5.0,
+            monatlicher_abschlag_eur=50.0,
+            abrechnungszeitraum_start=date(2026, 1, 1),
+            abrechnungszeitraum_dauer_monate=12,
+            verteilung="personen",
+        )
+        entry = _make_entry(og, dg, kp)
+
+        with (
+            patch(
+                "custom_components.hauskosten.coordinator.dt_util.now",
+                return_value=datetime(2026, 7, 1, 12, 0, tzinfo=UTC),
+            ),
+            patch(
+                "custom_components.hauskosten.coordinator."
+                "HauskostenCoordinator._fetch_abschlag_verbrauch",
+                new=AsyncMock(return_value={"kp-wasser": 30.0}),
+            ),
+        ):
+            await _setup_entry(hass, entry)
+
+        registry = er.async_get(hass)
+        haus_ist = next(
+            e
+            for e in registry.entities.values()
+            if e.unique_id == f"{entry.entry_id}_haus_abschlag_kp-wasser_ist"
+        )
+        # IST = 3 EUR/m3 * 30 m3 + 5 EUR * 6 months = 120 EUR (whole house)
+        state = hass.states.get(haus_ist.entity_id)
+        assert state is not None
+        assert float(state.state) == pytest.approx(120.0)
+        # Saldo = 120 - 300 = -180 (Guthaben)
+        haus_saldo = next(
+            e
+            for e in registry.entities.values()
+            if e.unique_id == f"{entry.entry_id}_haus_abschlag_kp-wasser_saldo"
+        )
+        saldo_state = hass.states.get(haus_saldo.entity_id)
+        assert float(saldo_state.state) == pytest.approx(-180.0)
+
+    async def test_abschlag_sensor_native_value_none_on_vanished_position(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Direct native_value returns None when the position is unknown."""
+        partei = _partei_subentry(subentry_id="og")
+        kp = _kp_subentry(
+            subentry_id="kp-vers",
+            bezeichnung="Versicherung",
+            kategorie="versicherung",
+            betrag_eur=450.0,
+            periodizitaet="jaehrlich",
+            verteilung="flaeche",
+        )
+        entry = _make_entry(partei, kp)
+        await _setup_entry(hass, entry)
+        coord: HauskostenCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+
+        gezahlt = ParteiAbschlagGezahltSensor(
+            coord, entry.entry_id, "og", "missing-kp", "Phantom"
+        )
+        ist = ParteiAbschlagIstSensor(
+            coord, entry.entry_id, "og", "missing-kp", "Phantom"
+        )
+        saldo = ParteiAbschlagSaldoSensor(
+            coord, entry.entry_id, "og", "missing-kp", "Phantom"
+        )
+        assert gezahlt.native_value is None
+        assert ist.native_value is None
+        assert saldo.native_value is None
+        # Haus variants without data return None too.
+        h_gezahlt = HausAbschlagGezahltSensor(
+            coord, entry.entry_id, "missing-kp", "Phantom"
+        )
+        h_ist = HausAbschlagIstSensor(coord, entry.entry_id, "missing-kp", "Phantom")
+        h_saldo = HausAbschlagSaldoSensor(
+            coord, entry.entry_id, "missing-kp", "Phantom"
+        )
+        assert h_gezahlt.native_value is None
+        assert h_ist.native_value is None
+        assert h_saldo.native_value is None
+
+    async def test_abschlag_sensor_attributes_carry_source_id(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """extra_state_attributes expose kostenposition_id + bezeichnung."""
+
+        partei = _partei_subentry(subentry_id="og", personen=2)
+        kp = _kp_subentry(
+            subentry_id="kp-w",
+            bezeichnung="Wasser",
+            kategorie="wasser",
+            zuordnung="haus",
+            betragsmodus="abschlag",
+            betrag_eur=None,
+            periodizitaet=None,
+            faelligkeit=None,
+            monatlicher_abschlag_eur=50.0,
+            abrechnungszeitraum_start=date(2026, 1, 1),
+            abrechnungszeitraum_dauer_monate=12,
+            verteilung="gleich",
+        )
+        entry = _make_entry(partei, kp)
+        with (
+            patch(
+                "custom_components.hauskosten.coordinator.dt_util.now",
+                return_value=datetime(2026, 7, 1, 12, 0, tzinfo=UTC),
+            ),
+            patch(
+                "custom_components.hauskosten.coordinator."
+                "HauskostenCoordinator._fetch_abschlag_verbrauch",
+                new=AsyncMock(return_value={"kp-w": None}),
+            ),
+        ):
+            await _setup_entry(hass, entry)
+        coord: HauskostenCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+        gezahlt = ParteiAbschlagGezahltSensor(
+            coord, entry.entry_id, "og", "kp-w", "Wasser"
+        )
+        attrs = gezahlt.extra_state_attributes
+        assert attrs["kostenposition_id"] == "kp-w"
+        assert attrs["bezeichnung"] == "Wasser"
+        haus_gezahlt = HausAbschlagGezahltSensor(
+            coord, entry.entry_id, "kp-w", "Wasser"
+        )
+        h_attrs = haus_gezahlt.extra_state_attributes
+        assert h_attrs["kostenposition_id"] == "kp-w"
+        assert h_attrs["bezeichnung"] == "Wasser"

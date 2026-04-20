@@ -34,7 +34,7 @@ Authoritative specs:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -46,8 +46,8 @@ from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
-from .models import Kategorie
+from .const import DOMAIN, SUBENTRY_KOSTENPOSITION
+from .models import Betragsmodus, Kategorie
 
 if TYPE_CHECKING:
     from datetime import date
@@ -69,10 +69,16 @@ _TRKEY_PARTEI_JAHR_AKTUELL = "partei_jahr_aktuell"
 _TRKEY_PARTEI_JAHR_BUDGET = "partei_jahr_budget"
 _TRKEY_PARTEI_FAELLIG = "partei_naechste_faelligkeit"
 _TRKEY_PARTEI_KAT = "partei_kategorie_jahr"
+_TRKEY_PARTEI_ABSCHLAG_GEZAHLT = "partei_abschlag_gezahlt_jahr"
+_TRKEY_PARTEI_ABSCHLAG_IST = "partei_abschlag_ist_jahr"
+_TRKEY_PARTEI_ABSCHLAG_SALDO = "partei_abschlag_saldo_jahr"
 _TRKEY_HAUS_GESAMT = "haus_jahr_gesamt"
 _TRKEY_HAUS_BUDGET = "haus_jahr_budget"
 _TRKEY_HAUS_KAT = "haus_kategorie_jahr"
 _TRKEY_HAUS_FAELLIG = "naechste_faelligkeit"
+_TRKEY_HAUS_ABSCHLAG_GEZAHLT = "haus_abschlag_gezahlt_jahr"
+_TRKEY_HAUS_ABSCHLAG_IST = "haus_abschlag_ist_jahr"
+_TRKEY_HAUS_ABSCHLAG_SALDO = "haus_abschlag_saldo_jahr"
 
 
 async def async_setup_entry(
@@ -153,41 +159,106 @@ def _build_sensors(
 
     entry_id = entry.entry_id
     new: list[HauskostenSensorBase] = []
+    abschlag_positions: list[tuple[str, str]] = _abschlag_positions(entry)
 
-    # Per-party sensors.
     for partei_id, partei_result in data["parteien"].items():
-        for partei_cls in _PARTEI_SENSOR_CLASSES:
-            uid = partei_cls.make_unique_id(entry_id, partei_id)
-            if uid in known_ids:
-                continue
-            known_ids.add(uid)
-            new.append(partei_cls(coordinator, entry_id, partei_id))
-        # Per-category sensors for this party.
-        for kategorie in partei_result["pro_kategorie_jahr_eur"]:
-            uid = ParteiKategorieSensor.make_unique_id(entry_id, partei_id, kategorie)
+        new.extend(
+            _build_partei_sensors(
+                coordinator,
+                entry_id,
+                partei_id,
+                partei_result,
+                abschlag_positions,
+                known_ids,
+            )
+        )
+    new.extend(
+        _build_haus_sensors(coordinator, entry_id, data, abschlag_positions, known_ids)
+    )
+    return new
+
+
+def _build_partei_sensors(
+    coordinator: HauskostenCoordinator,
+    entry_id: str,
+    partei_id: str,
+    partei_result: ParteiResult,
+    abschlag_positions: list[tuple[str, str]],
+    known_ids: set[str],
+) -> list[HauskostenSensorBase]:
+    """Return the set of party-scoped sensors that still need registering."""
+    new: list[HauskostenSensorBase] = []
+    for partei_cls in _PARTEI_SENSOR_CLASSES:
+        uid = partei_cls.make_unique_id(entry_id, partei_id)
+        if uid in known_ids:
+            continue
+        known_ids.add(uid)
+        new.append(partei_cls(coordinator, entry_id, partei_id))
+    for kategorie in partei_result["pro_kategorie_jahr_eur"]:
+        uid = ParteiKategorieSensor.make_unique_id(entry_id, partei_id, kategorie)
+        if uid in known_ids:
+            continue
+        known_ids.add(uid)
+        new.append(ParteiKategorieSensor(coordinator, entry_id, partei_id, kategorie))
+    for kp_id, bezeichnung in abschlag_positions:
+        for abschlag_cls in _PARTEI_ABSCHLAG_SENSOR_CLASSES:
+            uid = abschlag_cls.make_unique_id(entry_id, partei_id, kp_id)
             if uid in known_ids:
                 continue
             known_ids.add(uid)
             new.append(
-                ParteiKategorieSensor(coordinator, entry_id, partei_id, kategorie)
+                abschlag_cls(coordinator, entry_id, partei_id, kp_id, bezeichnung)
             )
+    return new
 
-    # House-wide sensors.
+
+def _build_haus_sensors(
+    coordinator: HauskostenCoordinator,
+    entry_id: str,
+    data: CoordinatorData,
+    abschlag_positions: list[tuple[str, str]],
+    known_ids: set[str],
+) -> list[HauskostenSensorBase]:
+    """Return the set of house-scoped sensors that still need registering."""
+    new: list[HauskostenSensorBase] = []
     for haus_cls in _HAUS_SENSOR_CLASSES:
         uid = haus_cls.make_haus_unique_id(entry_id)
         if uid in known_ids:
             continue
         known_ids.add(uid)
         new.append(haus_cls(coordinator, entry_id))
-
     for kategorie in data["haus"]["pro_kategorie_jahr_eur"]:
         uid = HausKategorieSensor.make_unique_id(entry_id, kategorie)
         if uid in known_ids:
             continue
         known_ids.add(uid)
         new.append(HausKategorieSensor(coordinator, entry_id, kategorie))
-
+    for kp_id, bezeichnung in abschlag_positions:
+        for haus_abschlag_cls in _HAUS_ABSCHLAG_SENSOR_CLASSES:
+            uid = haus_abschlag_cls.make_abschlag_unique_id(entry_id, kp_id)
+            if uid in known_ids:
+                continue
+            known_ids.add(uid)
+            new.append(haus_abschlag_cls(coordinator, entry_id, kp_id, bezeichnung))
     return new
+
+
+def _abschlag_positions(entry: ConfigEntry) -> list[tuple[str, str]]:
+    """Return ``(kp_id, bezeichnung)`` for every ABSCHLAG subentry of ``entry``.
+
+    Reads straight from ``entry.subentries`` instead of probing the
+    coordinator snapshot so we also emit sensors for mis-configured
+    positions (e.g. missing anchor) whose attributions carry ``None``
+    values -- the user sees "unavailable" rather than missing entities.
+    """
+    result: list[tuple[str, str]] = []
+    for sub in entry.subentries.values():
+        if sub.subentry_type != SUBENTRY_KOSTENPOSITION:
+            continue
+        if sub.data.get("betragsmodus") != Betragsmodus.ABSCHLAG.value:
+            continue
+        result.append((sub.subentry_id, str(sub.data.get("bezeichnung", ""))))
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -602,6 +673,251 @@ class HausKategorieSensor(_EuroHausMixin, HausSensorBase):
 
 
 # ---------------------------------------------------------------------------
+# Abschlag-position sensors (per party, per Kostenposition)
+# ---------------------------------------------------------------------------
+
+
+def _find_position(
+    result: ParteiResult | None,
+    kp_id: str,
+) -> PositionAttribution | None:
+    """Return the PositionAttribution for ``kp_id`` in ``result``, if any."""
+    if result is None:
+        return None
+    for pos in result["positionen"]:
+        if pos["kostenposition_id"] == kp_id:
+            return pos
+    return None
+
+
+class _ParteiAbschlagSensorBase(_EuroPartyMixin, ParteiSensorBase):
+    """Shared base for per-party Abschlag sensors.
+
+    Encodes the ``(entry_id, partei_id, kp_id)`` triple into the unique-id
+    and exposes the kostenposition's ``bezeichnung`` as a translation
+    placeholder so the frontend can render names like
+    ``"OG (Simon) - Wasser: Abschlaege 2026"``.
+    """
+
+    _zweck = "abschlag"  # overwritten by subclasses via `_suffix`
+    _suffix: ClassVar[str]
+
+    def __init__(
+        self,
+        coordinator: HauskostenCoordinator,
+        entry_id: str,
+        partei_id: str,
+        kp_id: str,
+        bezeichnung: str,
+    ) -> None:
+        """Store the target position and build a position-aware unique-id."""
+        self._kp_id = kp_id
+        self._bezeichnung = bezeichnung
+        super().__init__(coordinator, entry_id, partei_id)
+        self._attr_unique_id = self.make_unique_id(entry_id, partei_id, kp_id)
+
+    def _build_translation_placeholders(self) -> dict[str, str]:
+        """Extend the party placeholders with the position's ``bezeichnung``."""
+        placeholders = super()._build_translation_placeholders()
+        placeholders["bezeichnung"] = self._bezeichnung
+        return placeholders
+
+    @classmethod
+    def make_unique_id(
+        cls,
+        entry_id: str,
+        partei_id: str,
+        kp_id: str | None = None,
+    ) -> str:
+        """Return the stable unique-id including the position segment."""
+        if kp_id is None:
+            return f"{entry_id}_partei_{partei_id}_abschlag_{cls._suffix}"
+        return f"{entry_id}_partei_{partei_id}_abschlag_{kp_id}_{cls._suffix}"
+
+    def _abschlag_value(self, field: str) -> float | None:
+        """Read one of the abschlag_* fields from the target position."""
+        pos = _find_position(self._partei_result(), self._kp_id)
+        if pos is None:
+            return None
+        # ``.get`` on a TypedDict with a dynamic str key degrades to
+        # ``object``; the three abschlag_* fields are declared as
+        # ``float | None`` so the cast is safe for every call site.
+        return cast("float | None", pos.get(field))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the source position id for dashboard drill-down."""
+        base = _partei_attrs(self._partei_result(), self.coordinator.data)
+        base["kostenposition_id"] = self._kp_id
+        base["bezeichnung"] = self._bezeichnung
+        return base
+
+
+class ParteiAbschlagGezahltSensor(_ParteiAbschlagSensorBase):
+    """Cumulative prepayments the party has paid this reconciliation period."""
+
+    _suffix = "gezahlt"
+    _attr_translation_key = _TRKEY_PARTEI_ABSCHLAG_GEZAHLT
+    _attr_icon = "mdi:cash-multiple"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return this party's prepaid share (EUR)."""
+        return self._abschlag_value("abschlag_gezahlt_eur_jahr")
+
+
+class ParteiAbschlagIstSensor(_ParteiAbschlagSensorBase):
+    """Consumption-derived IST cost for this party in the current period."""
+
+    _suffix = "ist"
+    _attr_translation_key = _TRKEY_PARTEI_ABSCHLAG_IST
+    _attr_icon = "mdi:gauge"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return this party's IST share (EUR)."""
+        return self._abschlag_value("abschlag_ist_eur_jahr")
+
+
+class ParteiAbschlagSaldoSensor(_ParteiAbschlagSensorBase):
+    """Expected reconciliation saldo (IST - gezahlt) for this party.
+
+    Positive = Nachzahlung expected, negative = Guthaben expected.
+    """
+
+    _suffix = "saldo"
+    _attr_translation_key = _TRKEY_PARTEI_ABSCHLAG_SALDO
+    _attr_icon = "mdi:scale-balance"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return this party's saldo (EUR)."""
+        return self._abschlag_value("abschlag_saldo_eur_jahr")
+
+
+# ---------------------------------------------------------------------------
+# Abschlag house-wide sensors (aggregated across parties per Kostenposition)
+# ---------------------------------------------------------------------------
+
+
+def _sum_abschlag_field(
+    data: CoordinatorData | None,
+    kp_id: str,
+    field: str,
+) -> float | None:
+    """Sum one abschlag_* field across all parties for a position.
+
+    Returns ``None`` when no party has a usable value (e.g. IST is None
+    everywhere because the Statistics API has no data). Summing a mix of
+    populated and None values is treated as "whatever is populated" -- the
+    gezahlt field is always populated when the position is configured,
+    while IST / saldo may be None.
+    """
+    if data is None:
+        return None
+    total: float | None = None
+    for partei_result in data["parteien"].values():
+        pos = _find_position(partei_result, kp_id)
+        if pos is None:
+            continue
+        value = cast("float | None", pos.get(field))
+        if value is None:
+            continue
+        total = value if total is None else total + value
+    return total if total is None else round(total, 2)
+
+
+class _HausAbschlagSensorBase(_EuroHausMixin, HausSensorBase):
+    """Shared base for house-wide Abschlag aggregates per position."""
+
+    _zweck = "abschlag"  # placeholder; real id uses _suffix + kp_id
+    _suffix: ClassVar[str]
+
+    def __init__(
+        self,
+        coordinator: HauskostenCoordinator,
+        entry_id: str,
+        kp_id: str,
+        bezeichnung: str,
+    ) -> None:
+        """Store the position id and build a position-aware unique-id."""
+        self._kp_id = kp_id
+        self._bezeichnung = bezeichnung
+        super().__init__(coordinator, entry_id)
+        self._attr_unique_id = self.make_abschlag_unique_id(entry_id, kp_id)
+
+    def _build_translation_placeholders(self) -> dict[str, str]:
+        """Extend house placeholders with the position's ``bezeichnung``."""
+        placeholders = super()._build_translation_placeholders()
+        placeholders["bezeichnung"] = self._bezeichnung
+        return placeholders
+
+    @classmethod
+    def make_abschlag_unique_id(cls, entry_id: str, kp_id: str) -> str:
+        """Return the stable unique-id including the position segment."""
+        return f"{entry_id}_haus_abschlag_{kp_id}_{cls._suffix}"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the source position id + label for dashboard drill-down."""
+        return {
+            "kostenposition_id": self._kp_id,
+            "bezeichnung": self._bezeichnung,
+        }
+
+
+class HausAbschlagGezahltSensor(_HausAbschlagSensorBase):
+    """House-wide total of prepayments this period for one Kostenposition."""
+
+    _suffix = "gezahlt"
+    _attr_translation_key = _TRKEY_HAUS_ABSCHLAG_GEZAHLT
+    _attr_icon = "mdi:cash-multiple"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the sum of prepayments across all parties."""
+        return _sum_abschlag_field(
+            self.coordinator.data,
+            self._kp_id,
+            "abschlag_gezahlt_eur_jahr",
+        )
+
+
+class HausAbschlagIstSensor(_HausAbschlagSensorBase):
+    """House-wide IST cost this period for one Kostenposition."""
+
+    _suffix = "ist"
+    _attr_translation_key = _TRKEY_HAUS_ABSCHLAG_IST
+    _attr_icon = "mdi:gauge"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the sum of IST costs across all parties."""
+        return _sum_abschlag_field(
+            self.coordinator.data,
+            self._kp_id,
+            "abschlag_ist_eur_jahr",
+        )
+
+
+class HausAbschlagSaldoSensor(_HausAbschlagSensorBase):
+    """House-wide saldo this period for one Kostenposition."""
+
+    _suffix = "saldo"
+    _attr_translation_key = _TRKEY_HAUS_ABSCHLAG_SALDO
+    _attr_icon = "mdi:scale-balance"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the sum of saldi across all parties."""
+        return _sum_abschlag_field(
+            self.coordinator.data,
+            self._kp_id,
+            "abschlag_saldo_eur_jahr",
+        )
+
+
+# ---------------------------------------------------------------------------
 # Attribute helpers
 # ---------------------------------------------------------------------------
 
@@ -663,9 +979,23 @@ _PARTEI_SENSOR_CLASSES: tuple[type[ParteiSensorBase], ...] = (
     ParteiNaechsteFaelligkeitSensor,
 )
 
+#: Per-party Abschlag drill-down classes -- one instance per (party, kp).
+_PARTEI_ABSCHLAG_SENSOR_CLASSES: tuple[type[_ParteiAbschlagSensorBase], ...] = (
+    ParteiAbschlagGezahltSensor,
+    ParteiAbschlagIstSensor,
+    ParteiAbschlagSaldoSensor,
+)
+
 #: Non-category house-wide sensor classes -- one instance per entry.
 _HAUS_SENSOR_CLASSES: tuple[type[HausSensorBase], ...] = (
     HausJahrGesamtSensor,
     HausJahrBudgetSensor,
     HausNaechsteFaelligkeitSensor,
+)
+
+#: House-wide Abschlag aggregate classes -- one instance per Kostenposition.
+_HAUS_ABSCHLAG_SENSOR_CLASSES: tuple[type[_HausAbschlagSensorBase], ...] = (
+    HausAbschlagGezahltSensor,
+    HausAbschlagIstSensor,
+    HausAbschlagSaldoSensor,
 )

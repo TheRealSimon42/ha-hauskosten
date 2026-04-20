@@ -88,11 +88,14 @@ class Betragsmodus(StrEnum):
     """How the amount of a Kostenposition is determined.
 
     ``PAUSCHAL`` uses a fixed ``betrag_eur`` per ``periodizitaet``;
-    ``VERBRAUCH`` multiplies a unit price with a meter reading.
+    ``VERBRAUCH`` multiplies a unit price with a meter reading;
+    ``ABSCHLAG`` tracks monthly prepayments against an annual reconciliation
+    (see ``docs/DATA_MODEL.md`` for the Abschlag-specific field set).
     """
 
     PAUSCHAL = "pauschal"
     VERBRAUCH = "verbrauch"
+    ABSCHLAG = "abschlag"
 
 
 class Periodizitaet(StrEnum):
@@ -190,10 +193,20 @@ class Kostenposition(TypedDict):
         periodizitaet: Cadence of the pauschal amount.
         faelligkeit: First due date, also the anchor for recurrences.
         verbrauchs_entity: HA entity id of the main consumption sensor
-            (verbrauch only).
-        einheitspreis_eur: Price per unit, e.g. EUR/m3 (verbrauch only).
-        einheit: Unit the price is expressed in (verbrauch only).
-        grundgebuehr_eur_monat: Optional monthly base fee (verbrauch only).
+            (verbrauch / abschlag only).
+        einheitspreis_eur: Price per unit, e.g. EUR/m3 (verbrauch / abschlag
+            only).
+        einheit: Unit the price is expressed in (verbrauch / abschlag only).
+        grundgebuehr_eur_monat: Optional monthly base fee (verbrauch /
+            abschlag only).
+        monatlicher_abschlag_eur: Monthly prepayment amount for ``abschlag``
+            mode.
+        abrechnungszeitraum_start: First day of the currently running
+            reconciliation period for ``abschlag`` mode. The period rolls
+            forward by ``abrechnungszeitraum_dauer_monate`` whenever the
+            ``jahresabrechnung_buchen`` service is invoked.
+        abrechnungszeitraum_dauer_monate: Length of the reconciliation
+            period in months for ``abschlag`` mode (typically 12).
         verteilung: Distribution key used by
             :func:`.distribution.allocate`.
         verbrauch_entities_pro_partei: Map ``{partei_id: entity_id}`` used
@@ -213,11 +226,15 @@ class Kostenposition(TypedDict):
     betrag_eur: float | None
     periodizitaet: Periodizitaet | None
     faelligkeit: date | None
-    # Verbrauch:
+    # Verbrauch / Abschlag:
     verbrauchs_entity: str | None
     einheitspreis_eur: float | None
     einheit: Einheit | None
     grundgebuehr_eur_monat: float | None
+    # Abschlag:
+    monatlicher_abschlag_eur: float | None
+    abrechnungszeitraum_start: date | None
+    abrechnungszeitraum_dauer_monate: int | None
     # Verteilung:
     verteilung: Verteilung
     verbrauch_entities_pro_partei: dict[str, str] | None
@@ -281,11 +298,25 @@ class PositionAttribution(TypedDict):
             consumption by the sensor platform).
         kategorie: Category of the Kostenposition (denormalised).
         anteil_eur_jahr: This party's yearly share in Euro (rounded to 2
-            decimals by the coordinator).
+            decimals by the coordinator). For ``ABSCHLAG`` positions this
+            mirrors ``abschlag_gezahlt_eur_jahr`` so the regular
+            jahr-aktuell / jahr-budget aggregates reflect actually prepaid
+            amounts.
         verteilschluessel_verwendet: Which distribution key actually
             produced this share (useful when fallbacks kick in).
         error: Non-``None`` message when the allocation failed for this
             party -- the sensor shows the error rather than a misleading 0 EUR.
+        abschlag_gezahlt_eur_jahr: For ``Betragsmodus.ABSCHLAG`` only: the
+            cumulative prepayment attributed to this party in the current
+            reconciliation period. ``None`` for other modes.
+        abschlag_ist_eur_jahr: For ``Betragsmodus.ABSCHLAG`` only: the
+            consumption-derived IST cost attributed to this party in the
+            current period. ``None`` when no consumption sensor is
+            referenced or the Statistics API returned no data.
+        abschlag_saldo_eur_jahr: For ``Betragsmodus.ABSCHLAG`` only:
+            ``ist - gezahlt`` (positive = expected under-payment, negative
+            = expected credit). ``None`` when ``abschlag_ist_eur_jahr`` is
+            ``None``.
     """
 
     kostenposition_id: str
@@ -294,6 +325,9 @@ class PositionAttribution(TypedDict):
     anteil_eur_jahr: float
     verteilschluessel_verwendet: Verteilung
     error: str | None
+    abschlag_gezahlt_eur_jahr: float | None
+    abschlag_ist_eur_jahr: float | None
+    abschlag_saldo_eur_jahr: float | None
 
 
 class ParteiResult(TypedDict):

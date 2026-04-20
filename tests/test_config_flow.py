@@ -33,6 +33,8 @@ from custom_components.hauskosten.config_flow import (
     _validate_partei_input,
 )
 from custom_components.hauskosten.const import (
+    CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE,
+    CONF_ABRECHNUNGSZEITRAUM_START,
     CONF_AKTIV_AB,
     CONF_AKTIV_BIS,
     CONF_BETRAG_EUR,
@@ -48,6 +50,7 @@ from custom_components.hauskosten.const import (
     CONF_HAUS_NAME,
     CONF_HINWEIS,
     CONF_KATEGORIE,
+    CONF_MONATLICHER_ABSCHLAG_EUR,
     CONF_NAME,
     CONF_NOTIZ,
     CONF_PERIODIZITAET,
@@ -1011,3 +1014,180 @@ async def test_kostenposition_reconfigure_aborts_when_no_parteien(
     )
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "no_parteien"
+
+
+# ---------------------------------------------------------------------------
+# Kostenposition flow: ABSCHLAG (phase 5)
+# ---------------------------------------------------------------------------
+
+
+async def test_kostenposition_haus_abschlag_personen_without_verbrauch(
+    hass: HomeAssistant,
+) -> None:
+    """HAUS + ABSCHLAG without consumption sensor persists only prepayment."""
+    entry = _make_entry(hass, subentries=[_partei_subentry()])
+
+    result = await hass.config_entries.subentries.async_init(
+        (entry.entry_id, SUBENTRY_KOSTENPOSITION), context={"source": "user"}
+    )
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        {
+            CONF_BEZEICHNUNG: "Wasser",
+            CONF_KATEGORIE: Kategorie.WASSER.value,
+            CONF_ZUORDNUNG: Zuordnung.HAUS.value,
+            CONF_BETRAGSMODUS: Betragsmodus.ABSCHLAG.value,
+        },
+    )
+    assert result["step_id"] == "details"
+
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        {
+            CONF_MONATLICHER_ABSCHLAG_EUR: 50.0,
+            CONF_ABRECHNUNGSZEITRAUM_START: "2026-01-01",
+            CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE: 12,
+        },
+    )
+    assert result["step_id"] == "verteilung"
+
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        {CONF_VERTEILUNG: Verteilung.PERSONEN.value},
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    data = result["data"]
+    assert data[CONF_BETRAGSMODUS] == Betragsmodus.ABSCHLAG.value
+    assert data[CONF_MONATLICHER_ABSCHLAG_EUR] == 50.0
+    assert data[CONF_ABRECHNUNGSZEITRAUM_START] == "2026-01-01"
+    assert data[CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE] == 12
+    # Consumption fields absent -> stay None.
+    assert data[CONF_VERBRAUCHS_ENTITY] is None
+    assert data[CONF_EINHEITSPREIS_EUR] is None
+    assert data[CONF_EINHEIT] is None
+    assert data[CONF_GRUNDGEBUEHR_EUR_MONAT] is None
+
+
+async def test_kostenposition_haus_abschlag_with_verbrauch(
+    hass: HomeAssistant,
+) -> None:
+    """ABSCHLAG with a consumption sensor also persists price + unit + fee."""
+    entry = _make_entry(hass, subentries=[_partei_subentry()])
+
+    result = await hass.config_entries.subentries.async_init(
+        (entry.entry_id, SUBENTRY_KOSTENPOSITION), context={"source": "user"}
+    )
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        {
+            CONF_BEZEICHNUNG: "Wasser",
+            CONF_KATEGORIE: Kategorie.WASSER.value,
+            CONF_ZUORDNUNG: Zuordnung.HAUS.value,
+            CONF_BETRAGSMODUS: Betragsmodus.ABSCHLAG.value,
+        },
+    )
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        {
+            CONF_MONATLICHER_ABSCHLAG_EUR: 50.0,
+            CONF_ABRECHNUNGSZEITRAUM_START: "2026-01-01",
+            CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE: 12,
+            CONF_VERBRAUCHS_ENTITY: "sensor.wasserzaehler",
+            CONF_EINHEITSPREIS_EUR: 3.5,
+            CONF_EINHEIT: Einheit.KUBIKMETER.value,
+            CONF_GRUNDGEBUEHR_EUR_MONAT: 5.0,
+        },
+    )
+    assert result["step_id"] == "verteilung"
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        {CONF_VERTEILUNG: Verteilung.PERSONEN.value},
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    data = result["data"]
+    assert data[CONF_MONATLICHER_ABSCHLAG_EUR] == 50.0
+    assert data[CONF_VERBRAUCHS_ENTITY] == "sensor.wasserzaehler"
+    assert data[CONF_EINHEITSPREIS_EUR] == 3.5
+    assert data[CONF_EINHEIT] == Einheit.KUBIKMETER.value
+    assert data[CONF_GRUNDGEBUEHR_EUR_MONAT] == 5.0
+
+
+def test_validate_details_abschlag_missing_fields() -> None:
+    """Missing monthly + period start surface as errors."""
+    errors = _validate_details_input(
+        {
+            # both required fields missing
+            CONF_MONATLICHER_ABSCHLAG_EUR: None,
+            CONF_ABRECHNUNGSZEITRAUM_START: None,
+            CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE: 12,
+        },
+        zuordnung=Zuordnung.HAUS,
+        betragsmodus=Betragsmodus.ABSCHLAG,
+        parteien=[],
+    )
+    assert errors[CONF_MONATLICHER_ABSCHLAG_EUR] == "abschlag_required"
+    assert errors[CONF_ABRECHNUNGSZEITRAUM_START] == "zeitraum_start_required"
+
+
+def test_validate_details_abschlag_negative_amount() -> None:
+    """Negative monthly amount is rejected."""
+    errors = _validate_details_input(
+        {
+            CONF_MONATLICHER_ABSCHLAG_EUR: -5.0,
+            CONF_ABRECHNUNGSZEITRAUM_START: "2026-01-01",
+            CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE: 12,
+        },
+        zuordnung=Zuordnung.HAUS,
+        betragsmodus=Betragsmodus.ABSCHLAG,
+        parteien=[],
+    )
+    assert errors[CONF_MONATLICHER_ABSCHLAG_EUR] == "abschlag_required"
+
+
+def test_validate_details_abschlag_dauer_out_of_range() -> None:
+    """Duration outside [1, 36] is rejected."""
+    for bad in (0, -3, 37):
+        errors = _validate_details_input(
+            {
+                CONF_MONATLICHER_ABSCHLAG_EUR: 50.0,
+                CONF_ABRECHNUNGSZEITRAUM_START: "2026-01-01",
+                CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE: bad,
+            },
+            zuordnung=Zuordnung.HAUS,
+            betragsmodus=Betragsmodus.ABSCHLAG,
+            parteien=[],
+        )
+        assert errors[CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE] == "dauer_invalid"
+
+
+def test_validate_details_abschlag_verbrauch_requires_price_and_unit() -> None:
+    """If a sensor is set, price and unit become required."""
+    errors = _validate_details_input(
+        {
+            CONF_MONATLICHER_ABSCHLAG_EUR: 50.0,
+            CONF_ABRECHNUNGSZEITRAUM_START: "2026-01-01",
+            CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE: 12,
+            CONF_VERBRAUCHS_ENTITY: "sensor.wasser",
+            # price + unit missing
+        },
+        zuordnung=Zuordnung.HAUS,
+        betragsmodus=Betragsmodus.ABSCHLAG,
+        parteien=[],
+    )
+    assert errors[CONF_EINHEITSPREIS_EUR] == "einheitspreis_required"
+    assert errors[CONF_EINHEIT] == "einheit_required"
+
+
+def test_validate_details_abschlag_without_verbrauch_price_unit_optional() -> None:
+    """Without a sensor, price and unit stay optional."""
+    errors = _validate_details_input(
+        {
+            CONF_MONATLICHER_ABSCHLAG_EUR: 50.0,
+            CONF_ABRECHNUNGSZEITRAUM_START: "2026-01-01",
+            CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE: 12,
+        },
+        zuordnung=Zuordnung.HAUS,
+        betragsmodus=Betragsmodus.ABSCHLAG,
+        parteien=[],
+    )
+    assert errors == {}

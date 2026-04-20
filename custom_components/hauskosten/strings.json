@@ -99,7 +99,7 @@
         },
         "details": {
           "title": "Detail-Angaben",
-          "description": "Je nach Auswahl: Partei-Zuordnung, Pauschal-Betrag oder Verbrauchs-Entity.",
+          "description": "Je nach Auswahl: Partei-Zuordnung, Pauschal-Betrag, Verbrauchs-Entity oder Abschlag-Daten.",
           "data": {
             "zuordnung_partei_id": "Zielpartei",
             "betrag_eur": "Betrag (€)",
@@ -108,11 +108,18 @@
             "verbrauchs_entity": "Verbrauchs-Sensor",
             "einheitspreis_eur": "Einheitspreis (€)",
             "einheit": "Einheit",
-            "grundgebuehr_eur_monat": "Grundgebühr pro Monat (optional, €)"
+            "grundgebuehr_eur_monat": "Grundgebühr pro Monat (optional, €)",
+            "monatlicher_abschlag_eur": "Monatlicher Abschlag (€)",
+            "abrechnungszeitraum_start": "Abrechnungszeitraum-Start",
+            "abrechnungszeitraum_dauer_monate": "Abrechnungszeitraum (Monate)"
           },
           "data_description": {
             "faelligkeit": "Anker für wiederkehrende Zahlungen.",
-            "grundgebuehr_eur_monat": "Leer lassen wenn keine Grundgebühr anfällt."
+            "grundgebuehr_eur_monat": "Leer lassen wenn keine Grundgebühr anfällt.",
+            "monatlicher_abschlag_eur": "Was zahlst du monatlich als Abschlag?",
+            "abrechnungszeitraum_start": "Erster Tag des aktuellen Abrechnungsjahres.",
+            "abrechnungszeitraum_dauer_monate": "Üblicherweise 12 Monate.",
+            "verbrauchs_entity": "Optional: Zählersensor, damit die Integration die IST-Kosten aus dem Verbrauch ermitteln kann."
           }
         },
         "verteilung": {
@@ -160,6 +167,9 @@
         "verbrauchs_entity_required": "Verbrauchs-Sensor ist Pflicht.",
         "einheitspreis_required": "Einheitspreis ist Pflicht und muss ≥ 0 sein.",
         "einheit_required": "Einheit ist Pflicht.",
+        "abschlag_required": "Monatlicher Abschlag ist Pflicht und muss ≥ 0 sein.",
+        "zeitraum_start_required": "Abrechnungszeitraum-Start ist Pflicht.",
+        "dauer_invalid": "Dauer muss zwischen 1 und 36 Monaten liegen.",
         "verteilung_required": "Verteilschlüssel ist Pflicht.",
         "invalid_date_range": "„Aktiv ab“ muss vor oder gleich „Aktiv bis“ liegen.",
         "subzaehler_missing": "Für jede Partei muss ein Subzähler referenziert werden."
@@ -197,7 +207,8 @@
     "betragsmodus": {
       "options": {
         "pauschal": "Pauschal (fester Betrag)",
-        "verbrauch": "Verbrauch (Einheitspreis × Verbrauch)"
+        "verbrauch": "Verbrauch (Einheitspreis × Verbrauch)",
+        "abschlag": "Abschlag (monatliche Rate + Jahresabrechnung)"
       }
     },
     "periodizitaet": {
@@ -286,6 +297,28 @@
           "description": "Datum, an dem die Zahlung erfolgt ist."
         }
       }
+    },
+    "jahresabrechnung_buchen": {
+      "name": "Jahresabrechnung buchen",
+      "description": "Bucht die Jahresabrechnung einer Abschlag-Kostenposition: Differenz zwischen Final-Betrag und geleisteten Abschlägen wird als Nachzahlung verbucht, der Abrechnungszeitraum rollt automatisch weiter.",
+      "fields": {
+        "entry_id": {
+          "name": "Haus",
+          "description": "Die Hauskosten-Instanz. Nicht nötig, wenn nur ein Haus konfiguriert ist."
+        },
+        "kostenposition_id": {
+          "name": "Abschlag-Position",
+          "description": "Die ID der Abschlag-Kostenposition (subentry_id)."
+        },
+        "final_betrag_eur": {
+          "name": "Finaler Betrag (€)",
+          "description": "Der tatsächliche Rechnungsbetrag laut Abrechnung des Versorgers."
+        },
+        "abrechnungsdatum": {
+          "name": "Abrechnungsdatum",
+          "description": "Optional: Datum der Abrechnung. Default: heute."
+        }
+      }
     }
   },
   "entity": {
@@ -305,6 +338,15 @@
       "partei_kategorie_jahr": {
         "name": "{partei} – {kategorie} {jahr}"
       },
+      "partei_abschlag_gezahlt_jahr": {
+        "name": "{partei} – {bezeichnung}: Abschläge {jahr}"
+      },
+      "partei_abschlag_ist_jahr": {
+        "name": "{partei} – {bezeichnung}: IST {jahr}"
+      },
+      "partei_abschlag_saldo_jahr": {
+        "name": "{partei} – {bezeichnung}: Saldo {jahr}"
+      },
       "haus_jahr_gesamt": {
         "name": "Haus – Gesamtkosten {jahr}"
       },
@@ -313,6 +355,15 @@
       },
       "haus_kategorie_jahr": {
         "name": "Haus – {kategorie} {jahr}"
+      },
+      "haus_abschlag_gezahlt_jahr": {
+        "name": "Haus – {bezeichnung}: Abschläge {jahr}"
+      },
+      "haus_abschlag_ist_jahr": {
+        "name": "Haus – {bezeichnung}: IST {jahr}"
+      },
+      "haus_abschlag_saldo_jahr": {
+        "name": "Haus – {bezeichnung}: Saldo {jahr}"
       },
       "naechste_faelligkeit": {
         "name": "Nächste Fälligkeit"

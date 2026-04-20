@@ -69,11 +69,16 @@ class Kostenposition(TypedDict):
     periodizitaet: Periodizitaet | None
     faelligkeit: date | None       # für Reminder
 
-    # Felder bei VERBRAUCH:
+    # Felder bei VERBRAUCH + ABSCHLAG:
     verbrauchs_entity: str | None  # z. B. "sensor.wasserzaehler"
     einheitspreis_eur: float | None  # pro Einheit (€/m³, €/kWh)
     einheit: Einheit | None
     grundgebuehr_eur_monat: float | None  # optional
+
+    # Felder bei ABSCHLAG:
+    monatlicher_abschlag_eur: float | None
+    abrechnungszeitraum_start: date | None
+    abrechnungszeitraum_dauer_monate: int | None  # default 12
 
     # Wie wird verteilt?
     verteilung: Verteilung
@@ -113,6 +118,7 @@ class Zuordnung(StrEnum):
 class Betragsmodus(StrEnum):
     PAUSCHAL = "pauschal"               # Fester Betrag pro Periode
     VERBRAUCH = "verbrauch"             # Einheitspreis × Verbrauch
+    ABSCHLAG = "abschlag"               # Monatliche Rate + Jahresabrechnung
 
 class Periodizitaet(StrEnum):
     MONATLICH = "monatlich"
@@ -142,12 +148,31 @@ Nicht jede Kombination ist sinnvoll. Der Config Flow muss folgendes erzwingen:
 |---|---|---|---|
 | PARTEI | PAUSCHAL | DIREKT | ✅ — klassischer Fall (z. B. Grundgebühr Strom OG) |
 | PARTEI | VERBRAUCH | DIREKT | ✅ — z. B. individueller Stromzähler |
+| PARTEI | ABSCHLAG | DIREKT | ✅ — Partei zahlt eigenen Abschlag, z. B. Heizstrom |
 | PARTEI | * | GLEICH/FLAECHE/PERSONEN | ❌ — widersprüchlich |
 | HAUS | PAUSCHAL | GLEICH/FLAECHE/PERSONEN | ✅ — z. B. Müll nach Personen |
 | HAUS | PAUSCHAL | DIREKT | ❌ — widersprüchlich |
 | HAUS | VERBRAUCH | FLAECHE/PERSONEN | ✅ — Wasser ohne Subzähler → nach Personen |
 | HAUS | VERBRAUCH | VERBRAUCH_SUBZAEHLER | ✅ — Wasser mit Subzählern |
 | HAUS | VERBRAUCH | GLEICH | ✅ — selten, aber möglich |
+| HAUS | ABSCHLAG | GLEICH/FLAECHE/PERSONEN/VERBRAUCH_SUBZAEHLER | ✅ — Stadtwerke-Abschlag + Jahresabrechnung, Verteilung nach Schlüssel |
+
+### Abschlag-Semantik
+
+Bei `betragsmodus = ABSCHLAG`:
+
+- `monatlicher_abschlag_eur` und `abrechnungszeitraum_start` sind Pflicht.
+- `abrechnungszeitraum_dauer_monate` ist optional (Default 12 Monate,
+  Limits 1–36).
+- `verbrauchs_entity`, `einheitspreis_eur`, `einheit` und
+  `grundgebuehr_eur_monat` sind optional. Wenn `verbrauchs_entity`
+  gesetzt ist, werden `einheitspreis_eur` und `einheit` zu Pflicht.
+- Der Coordinator leitet aus `statistic_during_period` den Verbrauch
+  über den Zeitraum ab (Statistics-API). Fehlt die Zähler-Entity oder
+  liefert Statistics keine Daten, bleibt der IST-Anteil auf `None`
+  (Sensor "unavailable").
+- Felder wie `betrag_eur`, `periodizitaet`, `faelligkeit` sind bei
+  ABSCHLAG ungenutzt (`None`).
 
 **Implementierung in `config_flow.py`:** Nach Auswahl von `zuordnung` werden die möglichen Werte für `betragsmodus` und `verteilung` auf die gültigen Kombinationen reduziert.
 

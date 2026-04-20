@@ -29,7 +29,14 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.exceptions import ConfigEntryNotReady
 
-from .const import CONF_SCHEMA_VERSION, DOMAIN
+from .const import (
+    CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE,
+    CONF_ABRECHNUNGSZEITRAUM_START,
+    CONF_MONATLICHER_ABSCHLAG_EUR,
+    CONF_SCHEMA_VERSION,
+    DOMAIN,
+    SUBENTRY_KOSTENPOSITION,
+)
 from .coordinator import HauskostenCoordinator
 from .services import async_register_services, async_unregister_services
 from .storage import HauskostenStore
@@ -161,7 +168,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate an old config-entry schema to the current version.
 
     The integration currently ships schema version :data:`CONF_SCHEMA_VERSION`
-    (= 1). Entries written by a newer version (e.g. after a downgrade) are
+    (= 2). Entries written by a newer version (e.g. after a downgrade) are
     rejected rather than silently mis-read. Future schema bumps extend the
     logic here -- see ``docs/DATA_MODEL.md`` for the migration contract.
 
@@ -173,7 +180,6 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ``True`` when the entry is (already) at the current schema version,
         ``False`` when its version is newer than this integration knows.
     """
-    _ = hass  # reserved for future migration steps
     _LOGGER.debug(
         "Migration requested for entry %s: schema v%s -> v%s",
         entry.entry_id,
@@ -190,6 +196,35 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         return False
 
-    # Schema v1 is the current version -- nothing to migrate yet. Future
-    # breaking changes add their upgrade branch above this comment.
+    if entry.version == 1:
+        _migrate_v1_to_v2(hass, entry)
+
     return True
+
+
+def _migrate_v1_to_v2(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Populate Abschlag fields on existing kostenposition subentries.
+
+    Schema v2 introduces ``Betragsmodus.ABSCHLAG`` and three accompanying
+    fields on :class:`.models.Kostenposition`. Existing v1 records only need
+    the new keys filled with ``None`` so the v2 coordinator can ``.get()``
+    them without KeyError; the :class:`.models.Betragsmodus` value itself
+    stays untouched (existing rows are ``pauschal`` or ``verbrauch``).
+    """
+    for subentry in list(entry.subentries.values()):
+        if subentry.subentry_type != SUBENTRY_KOSTENPOSITION:
+            continue
+        data = dict(subentry.data)
+        mutated = False
+        for key in (
+            CONF_MONATLICHER_ABSCHLAG_EUR,
+            CONF_ABRECHNUNGSZEITRAUM_START,
+            CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE,
+        ):
+            if key not in data:
+                data[key] = None
+                mutated = True
+        if mutated:
+            hass.config_entries.async_update_subentry(entry, subentry, data=data)
+    hass.config_entries.async_update_entry(entry, version=CONF_SCHEMA_VERSION)
+    _LOGGER.info("Migrated entry %s from schema v1 to v2", entry.entry_id)
