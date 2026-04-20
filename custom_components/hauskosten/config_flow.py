@@ -41,6 +41,8 @@ from homeassistant.config_entries import (
 from homeassistant.helpers import selector
 
 from .const import (
+    CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE,
+    CONF_ABRECHNUNGSZEITRAUM_START,
     CONF_AKTIV_AB,
     CONF_AKTIV_BIS,
     CONF_BETRAG_EUR,
@@ -56,6 +58,7 @@ from .const import (
     CONF_HAUS_NAME,
     CONF_HINWEIS,
     CONF_KATEGORIE,
+    CONF_MONATLICHER_ABSCHLAG_EUR,
     CONF_NAME,
     CONF_NOTIZ,
     CONF_PERIODIZITAET,
@@ -65,6 +68,7 @@ from .const import (
     CONF_VERTEILUNG,
     CONF_ZUORDNUNG,
     CONF_ZUORDNUNG_PARTEI_ID,
+    DEFAULT_ABRECHNUNGSZEITRAUM_DAUER_MONATE,
     DEFAULT_PERSONEN,
     DOMAIN,
     MAX_FLAECHE_QM,
@@ -226,6 +230,14 @@ _SEL_EUR = selector.NumberSelector(
         step=0.01,
         mode=selector.NumberSelectorMode.BOX,
         unit_of_measurement="€",
+    )
+)
+_SEL_ABSCHLAG_DAUER = selector.NumberSelector(
+    selector.NumberSelectorConfig(
+        min=1,
+        max=36,
+        step=1,
+        mode=selector.NumberSelectorMode.BOX,
     )
 )
 _SEL_DATE = selector.DateSelector()
@@ -676,6 +688,19 @@ class KostenpositionSubentryFlow(ConfigSubentryFlow):
         else:
             self._data[CONF_ZUORDNUNG_PARTEI_ID] = None
 
+        # Start from a clean slate so switching modes on reconfigure does
+        # not leave stale values from the previous branch.
+        self._data[CONF_BETRAG_EUR] = None
+        self._data[CONF_PERIODIZITAET] = None
+        self._data[CONF_FAELLIGKEIT] = None
+        self._data[CONF_VERBRAUCHS_ENTITY] = None
+        self._data[CONF_EINHEITSPREIS_EUR] = None
+        self._data[CONF_EINHEIT] = None
+        self._data[CONF_GRUNDGEBUEHR_EUR_MONAT] = None
+        self._data[CONF_MONATLICHER_ABSCHLAG_EUR] = None
+        self._data[CONF_ABRECHNUNGSZEITRAUM_START] = None
+        self._data[CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE] = None
+
         if betragsmodus is Betragsmodus.PAUSCHAL:
             self._data[CONF_BETRAG_EUR] = float(user_input[CONF_BETRAG_EUR])
             self._data[CONF_PERIODIZITAET] = user_input[CONF_PERIODIZITAET]
@@ -683,19 +708,33 @@ class KostenpositionSubentryFlow(ConfigSubentryFlow):
             self._data[CONF_FAELLIGKEIT] = (
                 faelligkeit.isoformat() if faelligkeit else None
             )
-            self._data[CONF_VERBRAUCHS_ENTITY] = None
-            self._data[CONF_EINHEITSPREIS_EUR] = None
-            self._data[CONF_EINHEIT] = None
-            self._data[CONF_GRUNDGEBUEHR_EUR_MONAT] = None
-        else:
-            self._data[CONF_BETRAG_EUR] = None
-            self._data[CONF_PERIODIZITAET] = None
-            self._data[CONF_FAELLIGKEIT] = None
+        elif betragsmodus is Betragsmodus.VERBRAUCH:
             self._data[CONF_VERBRAUCHS_ENTITY] = user_input[CONF_VERBRAUCHS_ENTITY]
             self._data[CONF_EINHEITSPREIS_EUR] = float(
                 user_input[CONF_EINHEITSPREIS_EUR]
             )
             self._data[CONF_EINHEIT] = user_input[CONF_EINHEIT]
+            self._data[CONF_GRUNDGEBUEHR_EUR_MONAT] = _optional_number(
+                user_input.get(CONF_GRUNDGEBUEHR_EUR_MONAT)
+            )
+        else:  # ABSCHLAG
+            self._data[CONF_MONATLICHER_ABSCHLAG_EUR] = float(
+                user_input[CONF_MONATLICHER_ABSCHLAG_EUR]
+            )
+            start = _coerce_date(user_input[CONF_ABRECHNUNGSZEITRAUM_START])
+            self._data[CONF_ABRECHNUNGSZEITRAUM_START] = (
+                start.isoformat() if start else None
+            )
+            self._data[CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE] = int(
+                user_input[CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE]
+            )
+            entity = user_input.get(CONF_VERBRAUCHS_ENTITY)
+            self._data[CONF_VERBRAUCHS_ENTITY] = str(entity) if entity else None
+            self._data[CONF_EINHEITSPREIS_EUR] = _optional_number(
+                user_input.get(CONF_EINHEITSPREIS_EUR)
+            )
+            einheit = user_input.get(CONF_EINHEIT)
+            self._data[CONF_EINHEIT] = str(einheit) if einheit else None
             self._data[CONF_GRUNDGEBUEHR_EUR_MONAT] = _optional_number(
                 user_input.get(CONF_GRUNDGEBUEHR_EUR_MONAT)
             )
@@ -923,7 +962,7 @@ def _details_schema(
                 default=_default(CONF_FAELLIGKEIT, date.today().isoformat()),
             )
         ] = _SEL_DATE
-    else:
+    elif betragsmodus is Betragsmodus.VERBRAUCH:
         schema[
             vol.Required(
                 CONF_VERBRAUCHS_ENTITY,
@@ -940,6 +979,55 @@ def _details_schema(
             vol.Required(
                 CONF_EINHEIT,
                 default=_default(CONF_EINHEIT, Einheit.KWH.value),
+            )
+        ] = _SEL_EINHEIT
+        schema[
+            vol.Optional(
+                CONF_GRUNDGEBUEHR_EUR_MONAT,
+                description={"suggested_value": _default(CONF_GRUNDGEBUEHR_EUR_MONAT)},
+            )
+        ] = _SEL_EUR
+    else:  # ABSCHLAG
+        schema[
+            vol.Required(
+                CONF_MONATLICHER_ABSCHLAG_EUR,
+                default=_default(CONF_MONATLICHER_ABSCHLAG_EUR, 0.0),
+            )
+        ] = _SEL_EUR
+        schema[
+            vol.Required(
+                CONF_ABRECHNUNGSZEITRAUM_START,
+                default=_default(
+                    CONF_ABRECHNUNGSZEITRAUM_START,
+                    date(date.today().year, 1, 1).isoformat(),
+                ),
+            )
+        ] = _SEL_DATE
+        schema[
+            vol.Required(
+                CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE,
+                default=_default(
+                    CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE,
+                    DEFAULT_ABRECHNUNGSZEITRAUM_DAUER_MONATE,
+                ),
+            )
+        ] = _SEL_ABSCHLAG_DAUER
+        schema[
+            vol.Optional(
+                CONF_VERBRAUCHS_ENTITY,
+                description={"suggested_value": _default(CONF_VERBRAUCHS_ENTITY)},
+            )
+        ] = _SEL_ENTITY_SENSOR
+        schema[
+            vol.Optional(
+                CONF_EINHEITSPREIS_EUR,
+                description={"suggested_value": _default(CONF_EINHEITSPREIS_EUR)},
+            )
+        ] = _SEL_EUR
+        schema[
+            vol.Optional(
+                CONF_EINHEIT,
+                description={"suggested_value": _default(CONF_EINHEIT)},
             )
         ] = _SEL_EINHEIT
         schema[
@@ -968,22 +1056,66 @@ def _validate_details_input(
             errors[CONF_ZUORDNUNG_PARTEI_ID] = "partei_required"
 
     if betragsmodus is Betragsmodus.PAUSCHAL:
-        betrag = _optional_number(user_input.get(CONF_BETRAG_EUR))
-        if betrag is None or betrag < 0:
-            errors[CONF_BETRAG_EUR] = "betrag_required"
-        if not user_input.get(CONF_PERIODIZITAET):
-            errors[CONF_PERIODIZITAET] = "periodizitaet_required"
-        if _coerce_date(user_input.get(CONF_FAELLIGKEIT)) is None:
-            errors[CONF_FAELLIGKEIT] = "faelligkeit_required"
-    else:
-        if not user_input.get(CONF_VERBRAUCHS_ENTITY):
-            errors[CONF_VERBRAUCHS_ENTITY] = "verbrauchs_entity_required"
+        errors.update(_validate_pauschal(user_input))
+    elif betragsmodus is Betragsmodus.VERBRAUCH:
+        errors.update(_validate_verbrauch(user_input))
+    else:  # ABSCHLAG
+        errors.update(_validate_abschlag(user_input))
+
+    return errors
+
+
+def _validate_pauschal(user_input: Mapping[str, Any]) -> dict[str, str]:
+    """Validate the PAUSCHAL branch of the details step."""
+    errors: dict[str, str] = {}
+    betrag = _optional_number(user_input.get(CONF_BETRAG_EUR))
+    if betrag is None or betrag < 0:
+        errors[CONF_BETRAG_EUR] = "betrag_required"
+    if not user_input.get(CONF_PERIODIZITAET):
+        errors[CONF_PERIODIZITAET] = "periodizitaet_required"
+    if _coerce_date(user_input.get(CONF_FAELLIGKEIT)) is None:
+        errors[CONF_FAELLIGKEIT] = "faelligkeit_required"
+    return errors
+
+
+def _validate_verbrauch(user_input: Mapping[str, Any]) -> dict[str, str]:
+    """Validate the VERBRAUCH branch of the details step."""
+    errors: dict[str, str] = {}
+    if not user_input.get(CONF_VERBRAUCHS_ENTITY):
+        errors[CONF_VERBRAUCHS_ENTITY] = "verbrauchs_entity_required"
+    preis = _optional_number(user_input.get(CONF_EINHEITSPREIS_EUR))
+    if preis is None or preis < 0:
+        errors[CONF_EINHEITSPREIS_EUR] = "einheitspreis_required"
+    if not user_input.get(CONF_EINHEIT):
+        errors[CONF_EINHEIT] = "einheit_required"
+    return errors
+
+
+def _validate_abschlag(user_input: Mapping[str, Any]) -> dict[str, str]:
+    """Validate the ABSCHLAG branch of the details step.
+
+    If a consumption sensor is provided, unit price and unit become
+    required; otherwise the three consumption fields stay optional.
+    """
+    errors: dict[str, str] = {}
+    abschlag = _optional_number(user_input.get(CONF_MONATLICHER_ABSCHLAG_EUR))
+    if abschlag is None or abschlag < 0:
+        errors[CONF_MONATLICHER_ABSCHLAG_EUR] = "abschlag_required"
+    if _coerce_date(user_input.get(CONF_ABRECHNUNGSZEITRAUM_START)) is None:
+        errors[CONF_ABRECHNUNGSZEITRAUM_START] = "zeitraum_start_required"
+    dauer_raw = user_input.get(CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE)
+    try:
+        dauer = int(dauer_raw) if dauer_raw is not None else 0
+    except (TypeError, ValueError):
+        dauer = 0
+    if dauer <= 0 or dauer > 36:  # noqa: PLR2004 - max 3 years matches selector
+        errors[CONF_ABRECHNUNGSZEITRAUM_DAUER_MONATE] = "dauer_invalid"
+    if user_input.get(CONF_VERBRAUCHS_ENTITY):
         preis = _optional_number(user_input.get(CONF_EINHEITSPREIS_EUR))
         if preis is None or preis < 0:
             errors[CONF_EINHEITSPREIS_EUR] = "einheitspreis_required"
         if not user_input.get(CONF_EINHEIT):
             errors[CONF_EINHEIT] = "einheit_required"
-
     return errors
 
 

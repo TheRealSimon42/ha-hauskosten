@@ -99,7 +99,7 @@
         },
         "details": {
           "title": "Detail-Angaben",
-          "description": "Je nach Auswahl: Partei-Zuordnung, Pauschal-Betrag oder Verbrauchs-Entity.",
+          "description": "Je nach Auswahl: Partei-Zuordnung, Pauschal-Betrag, Verbrauchs-Entity oder Abschlag-Daten.",
           "data": {
             "zuordnung_partei_id": "Zielpartei",
             "betrag_eur": "Betrag (€)",
@@ -108,11 +108,18 @@
             "verbrauchs_entity": "Verbrauchs-Sensor",
             "einheitspreis_eur": "Einheitspreis (€)",
             "einheit": "Einheit",
-            "grundgebuehr_eur_monat": "Grundgebühr pro Monat (optional, €)"
+            "grundgebuehr_eur_monat": "Grundgebühr pro Monat (optional, €)",
+            "monatlicher_abschlag_eur": "Monatlicher Abschlag (€)",
+            "abrechnungszeitraum_start": "Abrechnungszeitraum-Start",
+            "abrechnungszeitraum_dauer_monate": "Abrechnungszeitraum (Monate)"
           },
           "data_description": {
             "faelligkeit": "Anker für wiederkehrende Zahlungen.",
-            "grundgebuehr_eur_monat": "Leer lassen wenn keine Grundgebühr anfällt."
+            "grundgebuehr_eur_monat": "Leer lassen wenn keine Grundgebühr anfällt.",
+            "monatlicher_abschlag_eur": "Was zahlst du monatlich als Abschlag?",
+            "abrechnungszeitraum_start": "Erster Tag des aktuellen Abrechnungsjahres.",
+            "abrechnungszeitraum_dauer_monate": "Üblicherweise 12 Monate.",
+            "verbrauchs_entity": "Optional: Zählersensor, damit die Integration die IST-Kosten aus dem Verbrauch ermitteln kann."
           }
         },
         "verteilung": {
@@ -160,6 +167,9 @@
         "verbrauchs_entity_required": "Verbrauchs-Sensor ist Pflicht.",
         "einheitspreis_required": "Einheitspreis ist Pflicht und muss ≥ 0 sein.",
         "einheit_required": "Einheit ist Pflicht.",
+        "abschlag_required": "Monatlicher Abschlag ist Pflicht und muss ≥ 0 sein.",
+        "zeitraum_start_required": "Abrechnungszeitraum-Start ist Pflicht.",
+        "dauer_invalid": "Dauer muss zwischen 1 und 36 Monaten liegen.",
         "verteilung_required": "Verteilschlüssel ist Pflicht.",
         "invalid_date_range": "„Aktiv ab“ muss vor oder gleich „Aktiv bis“ liegen.",
         "subzaehler_missing": "Für jede Partei muss ein Subzähler referenziert werden."
@@ -197,7 +207,8 @@
     "betragsmodus": {
       "options": {
         "pauschal": "Pauschal (fester Betrag)",
-        "verbrauch": "Verbrauch (Einheitspreis × Verbrauch)"
+        "verbrauch": "Verbrauch (Einheitspreis × Verbrauch)",
+        "abschlag": "Abschlag (monatliche Rate + Jahresabrechnung)"
       }
     },
     "periodizitaet": {

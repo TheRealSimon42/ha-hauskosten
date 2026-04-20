@@ -99,7 +99,7 @@
         },
         "details": {
           "title": "Details",
-          "description": "Depending on selection: target party, flat amount, or consumption entity.",
+          "description": "Depending on selection: target party, flat amount, consumption entity, or prepayment data.",
           "data": {
             "zuordnung_partei_id": "Target party",
             "betrag_eur": "Amount (EUR)",
@@ -108,11 +108,18 @@
             "verbrauchs_entity": "Consumption sensor",
             "einheitspreis_eur": "Unit price (EUR)",
             "einheit": "Unit",
-            "grundgebuehr_eur_monat": "Monthly base fee (optional, EUR)"
+            "grundgebuehr_eur_monat": "Monthly base fee (optional, EUR)",
+            "monatlicher_abschlag_eur": "Monthly prepayment (EUR)",
+            "abrechnungszeitraum_start": "Reconciliation period start",
+            "abrechnungszeitraum_dauer_monate": "Reconciliation period (months)"
           },
           "data_description": {
             "faelligkeit": "Anchor for recurring payments.",
-            "grundgebuehr_eur_monat": "Leave empty when there is no base fee."
+            "grundgebuehr_eur_monat": "Leave empty when there is no base fee.",
+            "monatlicher_abschlag_eur": "What do you pay monthly as a prepayment?",
+            "abrechnungszeitraum_start": "First day of the current reconciliation period.",
+            "abrechnungszeitraum_dauer_monate": "Usually 12 months.",
+            "verbrauchs_entity": "Optional: meter sensor so the integration can derive actual cost from consumption."
           }
         },
         "verteilung": {
@@ -160,6 +167,9 @@
         "verbrauchs_entity_required": "Consumption sensor is required.",
         "einheitspreis_required": "Unit price is required and must be >= 0.",
         "einheit_required": "Unit is required.",
+        "abschlag_required": "Monthly prepayment is required and must be >= 0.",
+        "zeitraum_start_required": "Reconciliation period start is required.",
+        "dauer_invalid": "Duration must be between 1 and 36 months.",
         "verteilung_required": "Distribution key is required.",
         "invalid_date_range": "\"Active from\" must be on or before \"Active until\".",
         "subzaehler_missing": "A sub-meter must be referenced for every party."
@@ -197,7 +207,8 @@
     "betragsmodus": {
       "options": {
         "pauschal": "Flat amount",
-        "verbrauch": "Consumption (price x usage)"
+        "verbrauch": "Consumption (price x usage)",
+        "abschlag": "Prepayment (monthly + annual reconciliation)"
       }
     },
     "periodizitaet": {
