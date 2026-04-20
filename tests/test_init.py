@@ -76,7 +76,7 @@ def _partei_subentry(
 
 def _make_entry(
     *subentries: ConfigSubentry,
-    version: int = 1,
+    version: int = CONF_SCHEMA_VERSION,
     entry_id: str = "entry-init-test",
 ) -> MockConfigEntry:
     """Build a MockConfigEntry with the given subentries and version."""
@@ -326,6 +326,67 @@ class TestMigrateEntry:
         entry = _make_entry(version=CONF_SCHEMA_VERSION + 1)
         entry.add_to_hass(hass)
         assert await async_migrate_entry(hass, entry) is False
+
+    async def test_migrate_v1_to_v2_bumps_version_and_extends_subentries(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """v1 entries get Abschlag fields (None) and version becomes 2."""
+        # A v1 kostenposition-subentry lacks the three Abschlag fields.
+        v1_kp_data: dict[str, Any] = {
+            "bezeichnung": "Gebäudeversicherung",
+            "kategorie": "versicherung",
+            "zuordnung": "haus",
+            "zuordnung_partei_id": None,
+            "betragsmodus": "pauschal",
+            "betrag_eur": 450.0,
+            "periodizitaet": "jaehrlich",
+            "faelligkeit": "2026-03-15",
+            "verbrauchs_entity": None,
+            "einheitspreis_eur": None,
+            "einheit": None,
+            "grundgebuehr_eur_monat": None,
+            "verteilung": "flaeche",
+            "verbrauch_entities_pro_partei": None,
+            "aktiv_ab": None,
+            "aktiv_bis": None,
+            "notiz": None,
+        }
+        kp_subentry = ConfigSubentry(
+            data=MappingProxyType(v1_kp_data),
+            subentry_id="kp-v1",
+            subentry_type=SUBENTRY_KOSTENPOSITION,
+            title="Gebäudeversicherung",
+            unique_id=None,
+        )
+        entry = _make_entry(_partei_subentry(), kp_subentry, version=1)
+        entry.add_to_hass(hass)
+
+        assert await async_migrate_entry(hass, entry) is True
+
+        assert entry.version == 2
+        migrated = entry.subentries[kp_subentry.subentry_id].data
+        assert migrated["monatlicher_abschlag_eur"] is None
+        assert migrated["abrechnungszeitraum_start"] is None
+        assert migrated["abrechnungszeitraum_dauer_monate"] is None
+        # Existing fields are preserved untouched.
+        assert migrated["betragsmodus"] == "pauschal"
+        assert migrated["betrag_eur"] == 450.0
+
+    async def test_migrate_v1_to_v2_skips_non_kostenposition_subentries(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """partei subentries stay untouched by the v1->v2 migration."""
+        entry = _make_entry(_partei_subentry(), version=1)
+        entry.add_to_hass(hass)
+
+        before = dict(entry.subentries["partei-og"].data)
+        assert await async_migrate_entry(hass, entry) is True
+        after = dict(entry.subentries["partei-og"].data)
+
+        assert entry.version == 2
+        assert before == after
 
 
 # ---------------------------------------------------------------------------

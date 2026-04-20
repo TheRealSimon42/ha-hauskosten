@@ -349,8 +349,13 @@ class HauskostenCoordinator(DataUpdateCoordinator[CoordinatorData]):
         betragsmodus = kp["betragsmodus"]
         if betragsmodus is Betragsmodus.PAUSCHAL:
             annual_amount = _annualize_pauschal(kp)
-        else:
+        elif betragsmodus is Betragsmodus.VERBRAUCH:
             annual_amount, amount_error = self._resolve_verbrauchs_amount(kp)
+        else:
+            # ABSCHLAG is handled by phase-3 logic; until that lands the
+            # coordinator produces an explicit error attribution so the user
+            # sees "nicht verfuegbar" instead of a silent zero.
+            amount_error = "abschlag mode pending"
 
         extra, dist_error = self._build_allocation_extra(
             kp,
@@ -606,6 +611,20 @@ def _kostenposition_from_subentry(subentry: ConfigSubentry) -> Kostenposition:
     data = subentry.data
     periodizitaet_raw = data.get("periodizitaet")
     einheit_raw = data.get("einheit")
+    dauer_raw = data.get("abrechnungszeitraum_dauer_monate")
+    dauer_monate: int | None
+    if dauer_raw is None:
+        dauer_monate = None
+    else:
+        try:
+            dauer_monate = int(dauer_raw)
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            _LOGGER.warning(
+                "Invalid abrechnungszeitraum_dauer_monate %r in subentry %s",
+                dauer_raw,
+                subentry.subentry_id,
+            )
+            dauer_monate = None
     return {
         "id": subentry.subentry_id,
         "bezeichnung": cast("str", data.get("bezeichnung", "")),
@@ -622,6 +641,11 @@ def _kostenposition_from_subentry(subentry: ConfigSubentry) -> Kostenposition:
         "einheitspreis_eur": _optional_float(data.get("einheitspreis_eur")),
         "einheit": _einheit_from_raw(einheit_raw),
         "grundgebuehr_eur_monat": _optional_float(data.get("grundgebuehr_eur_monat")),
+        "monatlicher_abschlag_eur": _optional_float(
+            data.get("monatlicher_abschlag_eur")
+        ),
+        "abrechnungszeitraum_start": _parse_date(data.get("abrechnungszeitraum_start")),
+        "abrechnungszeitraum_dauer_monate": dauer_monate,
         "verteilung": Verteilung(data.get("verteilung", "gleich")),
         "verbrauch_entities_pro_partei": cast(
             "dict[str, str] | None",

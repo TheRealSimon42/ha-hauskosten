@@ -108,12 +108,19 @@ _ALLOWED_VERTEILUNGEN: Final[
 ] = {
     (Zuordnung.PARTEI, Betragsmodus.PAUSCHAL): (Verteilung.DIREKT,),
     (Zuordnung.PARTEI, Betragsmodus.VERBRAUCH): (Verteilung.DIREKT,),
+    (Zuordnung.PARTEI, Betragsmodus.ABSCHLAG): (Verteilung.DIREKT,),
     (Zuordnung.HAUS, Betragsmodus.PAUSCHAL): (
         Verteilung.GLEICH,
         Verteilung.FLAECHE,
         Verteilung.PERSONEN,
     ),
     (Zuordnung.HAUS, Betragsmodus.VERBRAUCH): (
+        Verteilung.GLEICH,
+        Verteilung.FLAECHE,
+        Verteilung.PERSONEN,
+        Verteilung.VERBRAUCH_SUBZAEHLER,
+    ),
+    (Zuordnung.HAUS, Betragsmodus.ABSCHLAG): (
         Verteilung.GLEICH,
         Verteilung.FLAECHE,
         Verteilung.PERSONEN,
@@ -308,7 +315,7 @@ def _existing_parteien(
 class HauskostenConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle the initial setup flow -- create a house entry."""
 
-    VERSION = 1
+    VERSION = 2
 
     @classmethod
     def async_get_supported_subentry_types(

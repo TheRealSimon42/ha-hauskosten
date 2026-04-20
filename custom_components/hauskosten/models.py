@@ -88,11 +88,14 @@ class Betragsmodus(StrEnum):
     """How the amount of a Kostenposition is determined.
 
     ``PAUSCHAL`` uses a fixed ``betrag_eur`` per ``periodizitaet``;
-    ``VERBRAUCH`` multiplies a unit price with a meter reading.
+    ``VERBRAUCH`` multiplies a unit price with a meter reading;
+    ``ABSCHLAG`` tracks monthly prepayments against an annual reconciliation
+    (see ``docs/DATA_MODEL.md`` for the Abschlag-specific field set).
     """
 
     PAUSCHAL = "pauschal"
     VERBRAUCH = "verbrauch"
+    ABSCHLAG = "abschlag"
 
 
 class Periodizitaet(StrEnum):
@@ -190,10 +193,20 @@ class Kostenposition(TypedDict):
         periodizitaet: Cadence of the pauschal amount.
         faelligkeit: First due date, also the anchor for recurrences.
         verbrauchs_entity: HA entity id of the main consumption sensor
-            (verbrauch only).
-        einheitspreis_eur: Price per unit, e.g. EUR/m3 (verbrauch only).
-        einheit: Unit the price is expressed in (verbrauch only).
-        grundgebuehr_eur_monat: Optional monthly base fee (verbrauch only).
+            (verbrauch / abschlag only).
+        einheitspreis_eur: Price per unit, e.g. EUR/m3 (verbrauch / abschlag
+            only).
+        einheit: Unit the price is expressed in (verbrauch / abschlag only).
+        grundgebuehr_eur_monat: Optional monthly base fee (verbrauch /
+            abschlag only).
+        monatlicher_abschlag_eur: Monthly prepayment amount for ``abschlag``
+            mode.
+        abrechnungszeitraum_start: First day of the currently running
+            reconciliation period for ``abschlag`` mode. The period rolls
+            forward by ``abrechnungszeitraum_dauer_monate`` whenever the
+            ``jahresabrechnung_buchen`` service is invoked.
+        abrechnungszeitraum_dauer_monate: Length of the reconciliation
+            period in months for ``abschlag`` mode (typically 12).
         verteilung: Distribution key used by
             :func:`.distribution.allocate`.
         verbrauch_entities_pro_partei: Map ``{partei_id: entity_id}`` used
@@ -213,11 +226,15 @@ class Kostenposition(TypedDict):
     betrag_eur: float | None
     periodizitaet: Periodizitaet | None
     faelligkeit: date | None
-    # Verbrauch:
+    # Verbrauch / Abschlag:
     verbrauchs_entity: str | None
     einheitspreis_eur: float | None
     einheit: Einheit | None
     grundgebuehr_eur_monat: float | None
+    # Abschlag:
+    monatlicher_abschlag_eur: float | None
+    abrechnungszeitraum_start: date | None
+    abrechnungszeitraum_dauer_monate: int | None
     # Verteilung:
     verteilung: Verteilung
     verbrauch_entities_pro_partei: dict[str, str] | None
