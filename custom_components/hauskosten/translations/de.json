@@ -305,6 +305,15 @@
       "partei_kategorie_jahr": {
         "name": "{partei} – {kategorie} {jahr}"
       },
+      "partei_abschlag_gezahlt_jahr": {
+        "name": "{partei} – {bezeichnung}: Abschläge {jahr}"
+      },
+      "partei_abschlag_ist_jahr": {
+        "name": "{partei} – {bezeichnung}: IST {jahr}"
+      },
+      "partei_abschlag_saldo_jahr": {
+        "name": "{partei} – {bezeichnung}: Saldo {jahr}"
+      },
       "haus_jahr_gesamt": {
         "name": "Haus – Gesamtkosten {jahr}"
       },
@@ -313,6 +322,15 @@
       },
       "haus_kategorie_jahr": {
         "name": "Haus – {kategorie} {jahr}"
+      },
+      "haus_abschlag_gezahlt_jahr": {
+        "name": "Haus – {bezeichnung}: Abschläge {jahr}"
+      },
+      "haus_abschlag_ist_jahr": {
+        "name": "Haus – {bezeichnung}: IST {jahr}"
+      },
+      "haus_abschlag_saldo_jahr": {
+        "name": "Haus – {bezeichnung}: Saldo {jahr}"
       },
       "naechste_faelligkeit": {
         "name": "Nächste Fälligkeit"

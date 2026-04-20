@@ -305,6 +305,15 @@
       "partei_kategorie_jahr": {
         "name": "{partei} – {kategorie} {jahr}"
       },
+      "partei_abschlag_gezahlt_jahr": {
+        "name": "{partei} – {bezeichnung}: Prepayments {jahr}"
+      },
+      "partei_abschlag_ist_jahr": {
+        "name": "{partei} – {bezeichnung}: Actual {jahr}"
+      },
+      "partei_abschlag_saldo_jahr": {
+        "name": "{partei} – {bezeichnung}: Balance {jahr}"
+      },
       "haus_jahr_gesamt": {
         "name": "House – Total cost {jahr}"
       },
@@ -313,6 +322,15 @@
       },
       "haus_kategorie_jahr": {
         "name": "House – {kategorie} {jahr}"
+      },
+      "haus_abschlag_gezahlt_jahr": {
+        "name": "House – {bezeichnung}: Prepayments {jahr}"
+      },
+      "haus_abschlag_ist_jahr": {
+        "name": "House – {bezeichnung}: Actual {jahr}"
+      },
+      "haus_abschlag_saldo_jahr": {
+        "name": "House – {bezeichnung}: Balance {jahr}"
       },
       "naechste_faelligkeit": {
         "name": "Next due date"
