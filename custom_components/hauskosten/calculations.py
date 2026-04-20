@@ -19,6 +19,10 @@ from datetime import date
 from .models import Partei, Periodizitaet
 
 __all__ = [
+    "abschlag_ist_kosten",
+    "abschlag_saldo",
+    "abschlag_zeitraum_ende",
+    "abschlaege_gezahlt",
     "active_in_period",
     "annualize",
     "days_overlap",
@@ -26,6 +30,7 @@ __all__ = [
     "monthly_share",
     "next_due_date",
     "resolve_verbrauchs_betrag",
+    "vergangene_monate",
 ]
 
 
@@ -294,3 +299,166 @@ def effektive_tage(
         period_start,
         period_end,
     )
+
+
+# ---------------------------------------------------------------------------
+# Abschlag helpers (see issue #10 / docs/DATA_MODEL.md)
+# ---------------------------------------------------------------------------
+
+
+def abschlag_zeitraum_ende(zeitraum_start: date, dauer_monate: int) -> date:
+    """Return the inclusive last day of an Abschlag reconciliation period.
+
+    Args:
+        zeitraum_start: First day of the reconciliation period.
+        dauer_monate: Length of the period in months. Must be positive.
+
+    Returns:
+        The inclusive final date of the period, i.e. the day before the
+        same calendar day ``dauer_monate`` months after ``zeitraum_start``.
+        Month-end days shorter than ``zeitraum_start.day`` are clamped.
+
+    Raises:
+        ValueError: If ``dauer_monate`` is not positive.
+    """
+    if dauer_monate <= 0:
+        raise ValueError(f"dauer_monate must be positive, got {dauer_monate}")
+    next_period = _shift_month(zeitraum_start, dauer_monate)
+    return date.fromordinal(next_period.toordinal() - 1)
+
+
+def vergangene_monate(
+    zeitraum_start: date,
+    stichtag: date,
+    dauer_monate: int,
+) -> int:
+    """Count the full months elapsed between ``zeitraum_start`` and ``stichtag``.
+
+    A month counts as "elapsed" once the same calendar day one month later
+    has passed. In other words a reconciliation period anchored on
+    ``zeitraum_start`` is treated as a sequence of month-long chunks; we
+    return how many of those chunks are complete at ``stichtag``.
+
+    The result is clamped to ``[0, dauer_monate]`` -- a stichtag past the
+    period end reports the full duration, and a stichtag before the start
+    reports zero.
+
+    Args:
+        zeitraum_start: First day of the reconciliation period.
+        stichtag: Reference date.
+        dauer_monate: Upper bound on the returned count (period length in
+            months).
+
+    Returns:
+        Integer in ``[0, dauer_monate]`` of completed months.
+
+    Raises:
+        ValueError: If ``dauer_monate`` is not positive.
+    """
+    if dauer_monate <= 0:
+        raise ValueError(f"dauer_monate must be positive, got {dauer_monate}")
+    if stichtag <= zeitraum_start:
+        return 0
+    months = (stichtag.year - zeitraum_start.year) * 12 + (
+        stichtag.month - zeitraum_start.month
+    )
+    if stichtag.day < zeitraum_start.day:
+        months -= 1
+    return max(0, min(months, dauer_monate))
+
+
+def abschlaege_gezahlt(
+    monatlicher_abschlag_eur: float,
+    zeitraum_start: date,
+    dauer_monate: int,
+    stichtag: date,
+) -> float:
+    """Return the cumulative prepayments due by ``stichtag``.
+
+    Multiplies the monthly prepayment by the number of completed months in
+    the reconciliation period. The result is not rounded -- the caller
+    applies cent rounding at the sensor edge.
+
+    Args:
+        monatlicher_abschlag_eur: Monthly prepayment amount in Euro.
+            Non-negative.
+        zeitraum_start: First day of the reconciliation period.
+        dauer_monate: Length of the period in months. Positive.
+        stichtag: Reference date.
+
+    Returns:
+        Total amount prepaid so far in the current reconciliation period,
+        in Euro.
+
+    Raises:
+        ValueError: If ``monatlicher_abschlag_eur`` is negative or
+            ``dauer_monate`` is not positive.
+    """
+    if monatlicher_abschlag_eur < 0:
+        raise ValueError(
+            f"monatlicher_abschlag_eur must be non-negative, "
+            f"got {monatlicher_abschlag_eur}",
+        )
+    monate = vergangene_monate(zeitraum_start, stichtag, dauer_monate)
+    return float(monatlicher_abschlag_eur) * monate
+
+
+def abschlag_ist_kosten(
+    einheitspreis_eur: float,
+    verbrauch: float,
+    grundgebuehr_eur_monat: float | None,
+    monate_aktiv: int,
+) -> float:
+    """Return the consumption-derived IST cost for an Abschlag period.
+
+    Mirrors :func:`resolve_verbrauchs_betrag` but scales the base fee by an
+    explicit number of active months (not the implicit 12), because
+    reconciliation periods can be shorter than a year and can be evaluated
+    mid-period.
+
+    Args:
+        einheitspreis_eur: Price per unit. Non-negative.
+        verbrauch: Consumed amount over the period in the matching unit.
+            Non-negative.
+        grundgebuehr_eur_monat: Optional monthly base fee in Euro. ``None``
+            is treated as zero.
+        monate_aktiv: Number of months the position has been active in the
+            current period. Non-negative.
+
+    Returns:
+        IST cost in Euro with full float precision.
+
+    Raises:
+        ValueError: If any numeric input is negative.
+    """
+    if einheitspreis_eur < 0:
+        raise ValueError(
+            f"einheitspreis_eur must be non-negative, got {einheitspreis_eur}",
+        )
+    if verbrauch < 0:
+        raise ValueError(f"verbrauch must be non-negative, got {verbrauch}")
+    if monate_aktiv < 0:
+        raise ValueError(f"monate_aktiv must be non-negative, got {monate_aktiv}")
+    grund = grundgebuehr_eur_monat or 0.0
+    if grund < 0:
+        raise ValueError(
+            f"grundgebuehr_eur_monat must be non-negative, got {grund}",
+        )
+    return float(einheitspreis_eur) * float(verbrauch) + float(grund) * monate_aktiv
+
+
+def abschlag_saldo(ist_eur: float, gezahlt_eur: float) -> float:
+    """Return ``ist_eur - gezahlt_eur`` as the Abschlag balance.
+
+    Positive values mean an expected additional payment ("Nachzahlung"),
+    negative values mean credit ("Guthaben"). Cents rounding is applied
+    because the balance is shown directly as a sensor state.
+
+    Args:
+        ist_eur: Metered cost over the period in Euro.
+        gezahlt_eur: Cumulative prepayment total in Euro.
+
+    Returns:
+        Rounded difference in Euro (2 decimal places).
+    """
+    return round(float(ist_eur) - float(gezahlt_eur), 2)

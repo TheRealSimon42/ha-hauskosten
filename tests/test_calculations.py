@@ -15,6 +15,10 @@ from datetime import date
 import pytest
 
 from custom_components.hauskosten.calculations import (
+    abschlag_ist_kosten,
+    abschlag_saldo,
+    abschlag_zeitraum_ende,
+    abschlaege_gezahlt,
     active_in_period,
     annualize,
     days_overlap,
@@ -22,6 +26,7 @@ from custom_components.hauskosten.calculations import (
     monthly_share,
     next_due_date,
     resolve_verbrauchs_betrag,
+    vergangene_monate,
 )
 from custom_components.hauskosten.models import Partei, Periodizitaet
 
@@ -549,3 +554,161 @@ class TestResolveVerbrauchsBetrag:
     ) -> None:
         with pytest.raises(ValueError, match="non-negative"):
             resolve_verbrauchs_betrag(einheitspreis, verbrauch, grundgebuehr)
+
+
+# ---------------------------------------------------------------------------
+# abschlag_zeitraum_ende
+# ---------------------------------------------------------------------------
+
+
+class TestAbschlagZeitraumEnde:
+    """Reconciliation end date is the last day before the period rolls."""
+
+    def test_full_year_january_start(self) -> None:
+        assert abschlag_zeitraum_ende(date(2026, 1, 1), 12) == date(2026, 12, 31)
+
+    def test_half_year_from_march(self) -> None:
+        assert abschlag_zeitraum_ende(date(2026, 3, 1), 6) == date(2026, 8, 31)
+
+    def test_anchored_on_31st_clamps_to_short_months(self) -> None:
+        # 31-Jan -> add 1 month = 28-Feb (2026 not leap) -> end = 27-Feb
+        assert abschlag_zeitraum_ende(date(2026, 1, 31), 1) == date(2026, 2, 27)
+
+    def test_raises_on_non_positive_dauer(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            abschlag_zeitraum_ende(date(2026, 1, 1), 0)
+
+
+# ---------------------------------------------------------------------------
+# vergangene_monate
+# ---------------------------------------------------------------------------
+
+
+class TestVergangeneMonate:
+    """Count full months elapsed since the reconciliation period started."""
+
+    def test_stichtag_before_start_is_zero(self) -> None:
+        assert vergangene_monate(date(2026, 3, 1), date(2026, 2, 15), 12) == 0
+
+    def test_stichtag_equal_to_start_is_zero(self) -> None:
+        assert vergangene_monate(date(2026, 3, 1), date(2026, 3, 1), 12) == 0
+
+    def test_exact_month_boundary_counts(self) -> None:
+        # 1-Jan to 1-Feb = exactly one month elapsed.
+        assert vergangene_monate(date(2026, 1, 1), date(2026, 2, 1), 12) == 1
+
+    def test_mid_month_counts_prior_full_months_only(self) -> None:
+        # 1-Jan anchor, 10-Mar -> Jan + Feb full, March still running.
+        assert vergangene_monate(date(2026, 1, 1), date(2026, 3, 10), 12) == 2
+
+    def test_anchor_day_not_yet_reached_drops_current_month(self) -> None:
+        # 15-Jan anchor, 10-Feb -> Jan not fully closed (15-Jan to 14-Feb).
+        assert vergangene_monate(date(2026, 1, 15), date(2026, 2, 10), 12) == 0
+        # 15-Jan anchor, 15-Feb -> exactly one full month.
+        assert vergangene_monate(date(2026, 1, 15), date(2026, 2, 15), 12) == 1
+
+    def test_capped_at_duration(self) -> None:
+        # Past the end of the period -> report full duration, not more.
+        assert vergangene_monate(date(2026, 1, 1), date(2028, 6, 1), 12) == 12
+
+    def test_raises_on_non_positive_dauer(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            vergangene_monate(date(2026, 1, 1), date(2026, 6, 1), 0)
+
+
+# ---------------------------------------------------------------------------
+# abschlaege_gezahlt
+# ---------------------------------------------------------------------------
+
+
+class TestAbschlaegeGezahlt:
+    """Cumulative prepayment = monthly amount * elapsed months."""
+
+    def test_half_year_elapsed(self) -> None:
+        # 50 EUR / month, 1-Jan anchor, stichtag 1-Jul -> 6 months * 50 = 300.
+        got = abschlaege_gezahlt(50.0, date(2026, 1, 1), 12, date(2026, 7, 1))
+        assert got == pytest.approx(300.0)
+
+    def test_before_start_is_zero(self) -> None:
+        got = abschlaege_gezahlt(50.0, date(2026, 3, 1), 12, date(2026, 2, 1))
+        assert got == 0.0
+
+    def test_past_period_end_caps_at_full_year(self) -> None:
+        # 50 EUR, 12-month period that ended before stichtag -> 600, not more.
+        got = abschlaege_gezahlt(50.0, date(2025, 1, 1), 12, date(2027, 1, 1))
+        assert got == pytest.approx(600.0)
+
+    def test_zero_amount_returns_zero(self) -> None:
+        got = abschlaege_gezahlt(0.0, date(2026, 1, 1), 12, date(2026, 6, 1))
+        assert got == 0.0
+
+    def test_negative_amount_raises(self) -> None:
+        with pytest.raises(ValueError, match="non-negative"):
+            abschlaege_gezahlt(-10.0, date(2026, 1, 1), 12, date(2026, 6, 1))
+
+
+# ---------------------------------------------------------------------------
+# abschlag_ist_kosten
+# ---------------------------------------------------------------------------
+
+
+class TestAbschlagIstKosten:
+    """IST cost = price * usage + base fee * active months."""
+
+    def test_happy_path_half_year_with_base_fee(self) -> None:
+        # 30 m3 * 3 EUR + 5 EUR * 6 months = 90 + 30 = 120
+        got = abschlag_ist_kosten(3.0, 30.0, 5.0, 6)
+        assert got == pytest.approx(120.0)
+
+    def test_no_base_fee_defaults_to_zero(self) -> None:
+        got = abschlag_ist_kosten(3.0, 30.0, None, 6)
+        assert got == pytest.approx(90.0)
+
+    def test_zero_consumption_only_base_fee(self) -> None:
+        got = abschlag_ist_kosten(3.0, 0.0, 5.0, 4)
+        assert got == pytest.approx(20.0)
+
+    def test_zero_months_active_only_consumption(self) -> None:
+        # Base fee disappears when zero months have elapsed.
+        got = abschlag_ist_kosten(3.0, 30.0, 5.0, 0)
+        assert got == pytest.approx(90.0)
+
+    @pytest.mark.parametrize(
+        ("preis", "verbrauch", "grund", "monate"),
+        [
+            (-1.0, 10.0, None, 6),
+            (3.0, -1.0, None, 6),
+            (3.0, 10.0, -1.0, 6),
+            (3.0, 10.0, None, -1),
+        ],
+    )
+    def test_negative_inputs_raise(
+        self,
+        preis: float,
+        verbrauch: float,
+        grund: float | None,
+        monate: int,
+    ) -> None:
+        with pytest.raises(ValueError, match="non-negative"):
+            abschlag_ist_kosten(preis, verbrauch, grund, monate)
+
+
+# ---------------------------------------------------------------------------
+# abschlag_saldo
+# ---------------------------------------------------------------------------
+
+
+class TestAbschlagSaldo:
+    """Saldo = ist - gezahlt. Positive means under-paid."""
+
+    def test_nachzahlung_positive(self) -> None:
+        assert abschlag_saldo(560.0, 300.0) == 260.0
+
+    def test_guthaben_negative(self) -> None:
+        assert abschlag_saldo(240.0, 300.0) == -60.0
+
+    def test_ausgeglichen_is_zero(self) -> None:
+        assert abschlag_saldo(500.0, 500.0) == 0.0
+
+    def test_rounds_to_two_decimals(self) -> None:
+        assert abschlag_saldo(100.125, 50.005) == 50.12
