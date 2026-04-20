@@ -99,8 +99,17 @@ Die Konfiguration erfolgt vollständig über das Home-Assistant-Frontend. Keine 
 | Bezeichnung | Text | z. B. „Gebäudeversicherung" |
 | Kategorie | Auswahl | Versicherung, Müll, Wasser, … |
 | Zuordnung | Auswahl | Haus (auf Parteien verteilt) oder Partei (nur eine) |
-| Betragsmodus | Auswahl | Pauschal oder verbrauchsbasiert |
+| Betragsmodus | Auswahl | Pauschal, Verbrauch oder Abschlag |
 | Verteilung | Auswahl | Gleich / Fläche / Personen / Verbrauch / Direkt |
+
+Der **Abschlag-Modus** deckt den klassischen Fall ab: "monatlicher
+Abschlag + Jahresabrechnung" (Wasser, Heizstrom, Abwasser, …). Pro
+Position gibt's dann drei zusätzliche Sensoren pro Partei sowie Haus-
+Aggregate: gezahlte Abschläge, IST-Kosten (aus dem Zählerstand via
+Statistics-API) und den Saldo (positiv = Nachzahlung erwartet,
+negativ = Guthaben). Die Jahresabrechnung wird über den Service
+`hauskosten.jahresabrechnung_buchen` gebucht — der Zeitraum rollt
+danach automatisch um `abrechnungszeitraum_dauer_monate` weiter.
 
 Die vollständige Validierungsmatrix findet sich in [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md#validierungs-matrix).
 
@@ -124,11 +133,9 @@ Plus Haus-Aggregate: `sensor.hauskosten_haus_jahr_gesamt` usw.
 
 ## 🎯 Service-Calls
 
-> 📝 Services werden ab v0.3.0 verfügbar sein.
-
 - `hauskosten.add_einmalig` — Ad-hoc-Kostenposition hinzufügen (z. B. spontane Reparatur)
 - `hauskosten.mark_paid` — Position als bezahlt markieren
-- `hauskosten.reset_year` — Jahreswechsel-Reset
+- `hauskosten.jahresabrechnung_buchen` — Jahresabrechnung einer Abschlag-Position buchen (Delta als Nachzahlung, Zeitraum rollt weiter)
 
 ---
 

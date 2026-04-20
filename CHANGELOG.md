@@ -9,11 +9,55 @@ Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Added
 
-- —
+- **Abschlag-Modus** (`Betragsmodus.ABSCHLAG`) für Kostenpositionen nach dem
+  Muster "monatlicher Abschlag + Jahresabrechnung" (Wasser, Heizstrom,
+  Abwasser, …). Neue Felder an `Kostenposition`:
+  `monatlicher_abschlag_eur`, `abrechnungszeitraum_start`,
+  `abrechnungszeitraum_dauer_monate` (default 12). Validierungs-Matrix
+  deckt `HAUS × ABSCHLAG` (gleich/flaeche/personen/subzaehler) und
+  `PARTEI × ABSCHLAG` (direkt) ab. Closes #10.
+- Pure-Logik-Helfer in `calculations.py`: `vergangene_monate`,
+  `abschlaege_gezahlt`, `abschlag_ist_kosten`, `abschlag_saldo`,
+  `abschlag_zeitraum_ende` — 100 % Coverage.
+- Coordinator ruft die HA `recorder.statistics.statistic_during_period`
+  API auf, um den Verbrauch über den Abrechnungszeitraum zu ermitteln
+  (Zähler-Entity mit `state_class=total_increasing` empfohlen).
+  Recorder-Import ist lazy: nur wenn mindestens eine ABSCHLAG-Position
+  konfiguriert ist. Fällt Statistics aus, bleibt `abschlag_ist_eur_jahr`
+  / `abschlag_saldo_eur_jahr` auf `None` (Sensor "unavailable").
+- Neue `PositionAttribution`-Felder: `abschlag_gezahlt_eur_jahr`,
+  `abschlag_ist_eur_jahr`, `abschlag_saldo_eur_jahr` (alle
+  `float | None`). Für nicht-ABSCHLAG-Positionen stets `None`.
+- Sechs neue Sensor-Klassen — drei pro Partei × Position
+  (`abschlag_gezahlt`, `abschlag_ist`, `abschlag_saldo`) und drei pro
+  Haus × Position als Summen über alle Parteien. Dynamische Erzeugung
+  aus den Subentries.
+- Config Flow: ABSCHLAG-Zweig im Details-Step mit dem monatlichen
+  Abschlag, Zeitraum-Anker, Dauer in Monaten und optionalen
+  Verbrauchs-Feldern (Entity / Einheitspreis / Einheit / Grundgebühr).
+  Entity+Preis+Einheit sind gekoppelt: gesetzte Entity erzwingt die
+  beiden anderen.
+- Service `hauskosten.jahresabrechnung_buchen`: bucht die
+  Jahresabrechnung einer ABSCHLAG-Position. Der Delta zu den geleisteten
+  Abschlägen wird bei Nachzahlung als `AdHocKosten` mit gleicher
+  Kategorie / Zuordnung / Verteilung eingebucht, der
+  Abrechnungszeitraum-Anker rollt danach automatisch um
+  `abrechnungszeitraum_dauer_monate` weiter. Guthaben (Final < Gezahlt)
+  erzeugt kein AdHoc, rollt aber ebenfalls.
+- Schema-Version v2 mit Migration v1 → v2, die bestehende
+  Kostenposition-Subentries die drei neuen Felder als `None` ergänzt und
+  `entry.version` anhebt. Config-Flow-`VERSION` ebenfalls auf 2.
+- Neue Translations (DE + EN) für alle ABSCHLAG-Texte, Sensor-Namen und
+  Service-Felder.
 
 ### Changed
 
-- —
+- `_validate_details_input` in `config_flow.py` wurde in drei
+  Modus-spezifische Helper extrahiert (`_validate_pauschal`,
+  `_validate_verbrauch`, `_validate_abschlag`), um die zyklomatische
+  Komplexität unter der Codacy-Schwelle zu halten.
+- `_build_sensors` in `sensor.py` in `_build_partei_sensors` und
+  `_build_haus_sensors` zerlegt (gleicher Grund).
 
 ### Fixed
 
